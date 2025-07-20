@@ -14,6 +14,11 @@ if platform == "":
     else:
         platform = "linux"
 
+print(f"=== Build Configuration ===")
+print(f"Platform: {platform}")
+print(f"Target: {target}")
+print(f"Arguments: {dict(ARGUMENTS)}")
+
 # Map new target names to old ones for library naming
 if target == "template_release":
     lib_target = "release"
@@ -21,6 +26,8 @@ elif target == "template_debug":
     lib_target = "debug"
 else:
     lib_target = target
+
+print(f"Mapped lib_target: {lib_target}")
 
 # Setup environment
 env = Environment()
@@ -75,11 +82,14 @@ elif platform == "macos":
     target_arch = ARGUMENTS.get("arch", "arm64")  # Default to arm64 for Apple Silicon
     library_name = f"wfc.{lib_target}.{target_arch}.dylib"
     
+    print(f"=== macOS Build Details ===")
+    print(f"Requested architecture: {target_arch}")
+    print(f"Library name: {library_name}")
+    
     # Link godot-cpp - make sure we're linking the right architecture
     godot_cpp_lib = f"libgodot-cpp.{platform}.{target}.{target_arch}.a"
     godot_cpp_lib_path_full = os.path.join(godot_cpp_lib_path, godot_cpp_lib)
     
-    print(f"Building for macOS {target_arch}")
     print(f"Looking for godot-cpp library: {godot_cpp_lib_path_full}")
     
     # Verify the library exists
@@ -123,6 +133,11 @@ sources = ["WFCChunk.cpp", "entry.cpp"]
 # Build the shared library
 library_path = os.path.join(bin_dir, library_name)
 library = env.SharedLibrary(target=library_path, source=sources)
+
+print(f"=== Build Summary ===")
+print(f"Output library: {library_path}")
+print(f"Platform: {platform}, Architecture: {target_arch}")
+print(f"Target: {target} -> {lib_target}")
 
 # Set default target
 Default(library)

@@ -75,14 +75,49 @@ jobs:
           ls -la bin/
       
       - name: Verify build output
+        shell: bash
         run: |
           echo "Verifying build output exists..."
+          echo "Contents of bin directory:"
+          ls -la bin/ || echo "bin directory doesn't exist"
+          
+          # Find the actual library that was built
           if [[ "${{ matrix.platform }}" == "linux" ]]; then
-            test -f "bin/wfc.release.${{ matrix.arch }}.so" || (echo "Linux library not found!" && exit 1)
+            expected="bin/wfc.release.${{ matrix.arch }}.so"
+            if [[ -f "$expected" ]]; then
+              echo "✅ Linux library found: $expected"
+            else
+              echo "❌ Linux library not found: $expected"
+              echo "Available files:"
+              find bin/ -name "*.so" 2>/dev/null || echo "No .so files found"
+              exit 1
+            fi
           elif [[ "${{ matrix.platform }}" == "windows" ]]; then
-            test -f "bin/wfc.release.${{ matrix.arch }}.dll" || (echo "Windows library not found!" && exit 1)
+            expected="bin/wfc.release.${{ matrix.arch }}.dll"
+            if [[ -f "$expected" ]]; then
+              echo "✅ Windows library found: $expected"
+            else
+              echo "❌ Windows library not found: $expected"
+              echo "Available files:"
+              find bin/ -name "*.dll" 2>/dev/null || echo "No .dll files found"
+              exit 1
+            fi
           elif [[ "${{ matrix.platform }}" == "macos" ]]; then
-            test -f "bin/wfc.release.${{ matrix.arch }}.dylib" || (echo "macOS library not found!" && exit 1)
+            expected="bin/wfc.release.${{ matrix.arch }}.dylib"
+            if [[ -f "$expected" ]]; then
+              echo "✅ macOS library found: $expected"
+            else
+              echo "❌ macOS library not found: $expected"
+              echo "Available files:"
+              find bin/ -name "*.dylib" 2>/dev/null || echo "No .dylib files found"
+              # Check if any dylib was built (might be wrong arch)
+              if ls bin/*.dylib 1> /dev/null 2>&1; then
+                echo "But found these dylib files:"
+                ls -la bin/*.dylib
+                echo "This suggests an architecture mismatch in the build"
+              fi
+              exit 1
+            fi
           fi
           echo "Build output verified successfully!"
       
