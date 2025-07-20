@@ -40,16 +40,32 @@ jobs:
       - name: Install SCons
         run: pip install scons
 
+      - name: Setup build environment
+        shell: bash
+        run: |
+          if [[ "${{ matrix.platform }}" == "windows" ]]; then
+            # Windows setup
+            echo "Setting up Windows build environment"
+            # GitHub Actions Windows runners should handle ARM64 cross-compilation
+          elif [[ "${{ matrix.platform }}" == "linux" ]]; then
+            # Linux setup
+            sudo apt-get update
+            sudo apt-get install -y build-essential
+          elif [[ "${{ matrix.platform }}" == "macos" ]]; then
+            # macOS setup
+            echo "macOS build environment ready"
+          fi
+
       - name: Clone godot-cpp
         run: |
-          git clone https://github.com/godotengine/godot-cpp.git
+          git clone --recursive https://github.com/godotengine/godot-cpp.git
           cd godot-cpp
-          scons platform=${{ matrix.platform }} generate_bindings=yes target=${{ matrix.target }} arch=${{ matrix.arch }}
+          scons platform=${{ matrix.platform }} generate_bindings=yes target=${{ matrix.target }} arch=${{ matrix.arch }} -j4
           cd ..
 
       - name: Build GDExtension
         run: |
-          scons platform=${{ matrix.platform }} target=${{ matrix.target }} arch=${{ matrix.arch }}
+          scons platform=${{ matrix.platform }} target=${{ matrix.target }} arch=${{ matrix.arch }} -j4
       
       - name: Upload built library
         uses: actions/upload-artifact@v4

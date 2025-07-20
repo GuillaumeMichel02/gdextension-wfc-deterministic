@@ -3,8 +3,8 @@ entry_symbol = "wfc_library_init"
 compatibility_minimum = "4.0"
 
 [libraries]
-macos.release.arm64 = "bin/wfc.release.arm64.dylib"
-macos.release.x86_64 = "bin/wfc.release.x86_64.dylib"
-windows.release.x86_64 = "bin/wfc.release.x86_64.dll"
-windows.release.arm64 = "bin/wfc.release.arm64.dll"
-linux.release.x86_64 = "bin/wfc.release.x86_64.so"
+macos.template_release.arm64 = "bin/wfc.release.arm64.dylib"
+macos.template_release.x86_64 = "bin/wfc.release.x86_64.dylib"
+windows.template_release.x86_64 = "bin/wfc.release.x86_64.dll"
+windows.template_release.arm64 = "bin/wfc.release.arm64.dll"
+linux.template_release.x86_64 = "bin/wfc.release.x86_64.so"
