@@ -8,6 +8,7 @@ on:
 jobs:
   build:
     strategy:
+      fail-fast: false  # Don't cancel other builds if one fails
       matrix:
         include:
           - os: ubuntu-latest
@@ -60,12 +61,30 @@ jobs:
         run: |
           git clone --recursive https://github.com/godotengine/godot-cpp.git
           cd godot-cpp
-          scons platform=${{ matrix.platform }} generate_bindings=yes target=${{ matrix.target }} arch=${{ matrix.arch }} -j4
+          echo "Building godot-cpp for ${{ matrix.platform }} ${{ matrix.arch }}..."
+          scons platform=${{ matrix.platform }} generate_bindings=yes target=${{ matrix.target }} arch=${{ matrix.arch }} -j2
+          echo "Listing built libraries:"
+          ls -la bin/
           cd ..
 
       - name: Build GDExtension
         run: |
-          scons platform=${{ matrix.platform }} target=${{ matrix.target }} arch=${{ matrix.arch }} -j4
+          echo "Building GDExtension for ${{ matrix.platform }} ${{ matrix.arch }}..."
+          scons platform=${{ matrix.platform }} target=${{ matrix.target }} arch=${{ matrix.arch }} -j2
+          echo "Listing built files:"
+          ls -la bin/
+      
+      - name: Verify build output
+        run: |
+          echo "Verifying build output exists..."
+          if [[ "${{ matrix.platform }}" == "linux" ]]; then
+            test -f "bin/wfc.release.${{ matrix.arch }}.so" || (echo "Linux library not found!" && exit 1)
+          elif [[ "${{ matrix.platform }}" == "windows" ]]; then
+            test -f "bin/wfc.release.${{ matrix.arch }}.dll" || (echo "Windows library not found!" && exit 1)
+          elif [[ "${{ matrix.platform }}" == "macos" ]]; then
+            test -f "bin/wfc.release.${{ matrix.arch }}.dylib" || (echo "macOS library not found!" && exit 1)
+          fi
+          echo "Build output verified successfully!"
       
       - name: Upload built library
         uses: actions/upload-artifact@v4
