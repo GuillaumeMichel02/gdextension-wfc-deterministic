@@ -60,6 +60,10 @@ if platform == "windows":
     
     # Link godot-cpp
     godot_cpp_lib = f"godot-cpp.{platform}.{target}.{target_arch}"
+    
+    print(f"Building for Windows {target_arch}")
+    print(f"Looking for godot-cpp library: {godot_cpp_lib}")
+    
     env.Append(LIBPATH=[godot_cpp_lib_path])
     env.Append(LIBS=[godot_cpp_lib])
 
@@ -71,10 +75,25 @@ elif platform == "macos":
     target_arch = ARGUMENTS.get("arch", "arm64")  # Default to arm64 for Apple Silicon
     library_name = f"wfc.{lib_target}.{target_arch}.dylib"
     
-    # Link godot-cpp
+    # Link godot-cpp - make sure we're linking the right architecture
     godot_cpp_lib = f"libgodot-cpp.{platform}.{target}.{target_arch}.a"
+    godot_cpp_lib_path_full = os.path.join(godot_cpp_lib_path, godot_cpp_lib)
+    
+    print(f"Building for macOS {target_arch}")
+    print(f"Looking for godot-cpp library: {godot_cpp_lib_path_full}")
+    
+    # Verify the library exists
+    if not os.path.exists(godot_cpp_lib_path_full):
+        print(f"ERROR: godot-cpp library not found at {godot_cpp_lib_path_full}")
+        print("Available libraries:")
+        if os.path.exists(godot_cpp_lib_path):
+            for f in os.listdir(godot_cpp_lib_path):
+                if f.startswith("libgodot-cpp") and f.endswith(".a"):
+                    print(f"  {f}")
+        Exit(1)
+    
     env.Append(LIBPATH=[godot_cpp_lib_path])
-    env.Append(LIBS=[File(os.path.join(godot_cpp_lib_path, godot_cpp_lib))])
+    env.Append(LIBS=[File(godot_cpp_lib_path_full)])
 
 else:  # linux
     env.Append(CXXFLAGS=["-fPIC"])
@@ -85,8 +104,13 @@ else:  # linux
     
     # Link godot-cpp
     godot_cpp_lib = f"libgodot-cpp.{platform}.{target}.{target_arch}.a"
+    godot_cpp_lib_path_full = os.path.join(godot_cpp_lib_path, godot_cpp_lib)
+    
+    print(f"Building for Linux {target_arch}")
+    print(f"Looking for godot-cpp library: {godot_cpp_lib_path_full}")
+    
     env.Append(LIBPATH=[godot_cpp_lib_path])
-    env.Append(LIBS=[File(os.path.join(godot_cpp_lib_path, godot_cpp_lib))])
+    env.Append(LIBS=[File(godot_cpp_lib_path_full)])
 
 # Create bin directory if it doesn't exist
 bin_dir = "bin"
