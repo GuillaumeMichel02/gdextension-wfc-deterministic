@@ -1,0 +1,10 @@
+[configuration]
+entry_symbol = "GDExtensionInit"
+compatibility_minimum = "4.0"
+
+[libraries]
+macos.release.arm64 = "bin/wfc.release.arm64.dylib"
+macos.release.x86_64 = "bin/wfc.release.x86_64.dylib"
+windows.release.x86_64 = "bin/wfc.release.x86_64.dll"
+windows.release.arm64 = "bin/wfc.release.arm64.dll"
+linux.release.x86_64 = "bin/wfc.release.x86_64.so"

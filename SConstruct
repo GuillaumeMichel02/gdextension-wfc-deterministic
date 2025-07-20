@@ -1,0 +1,96 @@
+import os
+import sys
+
+# Get build parameters
+platform = ARGUMENTS.get("platform", "")
+target = ARGUMENTS.get("target", "release")
+
+# Auto-detect platform if not specified
+if platform == "":
+    if sys.platform.startswith("win"):
+        platform = "windows"
+    elif sys.platform == "darwin":
+        platform = "macos"
+    else:
+        platform = "linux"
+
+# Setup environment
+env = Environment()
+
+# Godot-cpp path
+godot_cpp_path = "godot-cpp"
+godot_cpp_lib_path = os.path.join(godot_cpp_path, "bin")
+
+# Include paths
+env.Append(CPPPATH=[
+    os.path.join(godot_cpp_path, "include"),
+    os.path.join(godot_cpp_path, "gen", "include"),
+    os.path.join(godot_cpp_path, "gdextension")
+])
+
+# C++ standard
+env.Append(CXXFLAGS=["-std=c++17"])
+
+# Debug/Release flags
+if target == "debug":
+    env.Append(CXXFLAGS=["-g", "-O0", "-DDEBUG_ENABLED"])
+    if platform != "windows":
+        env.Append(CXXFLAGS=["-fno-omit-frame-pointer"])
+else:  # release
+    env.Append(CXXFLAGS=["-O3", "-DNDEBUG"])
+    if platform != "windows":
+        env.Append(CXXFLAGS=["-fomit-frame-pointer"])
+
+# Platform-specific settings
+if platform == "windows":
+    env.Append(CXXFLAGS=["/MD"])
+    env.Append(LINKFLAGS=["/WX:NO"])
+    
+    # Architecture detection
+    target_arch = ARGUMENTS.get("arch", "x86_64")
+    library_name = f"wfc.{target}.{target_arch}.dll"
+    
+    # Link godot-cpp
+    godot_cpp_lib = f"godot-cpp.{platform}.{target}.{target_arch}"
+    env.Append(LIBPATH=[godot_cpp_lib_path])
+    env.Append(LIBS=[godot_cpp_lib])
+
+elif platform == "macos":
+    env.Append(CXXFLAGS=["-fPIC"])
+    env.Append(LINKFLAGS=["-Wl,-undefined,dynamic_lookup"])
+    
+    # Architecture detection
+    target_arch = ARGUMENTS.get("arch", "arm64")  # Default to arm64 for Apple Silicon
+    library_name = f"wfc.{target}.{target_arch}.dylib"
+    
+    # Link godot-cpp
+    godot_cpp_lib = f"libgodot-cpp.{platform}.{target}.{target_arch}.a"
+    env.Append(LIBPATH=[godot_cpp_lib_path])
+    env.Append(LIBS=[File(os.path.join(godot_cpp_lib_path, godot_cpp_lib))])
+
+else:  # linux
+    env.Append(CXXFLAGS=["-fPIC"])
+    
+    # Architecture detection
+    target_arch = ARGUMENTS.get("arch", "x86_64")
+    library_name = f"wfc.{target}.{target_arch}.so"
+    
+    # Link godot-cpp
+    godot_cpp_lib = f"libgodot-cpp.{platform}.{target}.{target_arch}.a"
+    env.Append(LIBPATH=[godot_cpp_lib_path])
+    env.Append(LIBS=[File(os.path.join(godot_cpp_lib_path, godot_cpp_lib))])
+
+# Create bin directory if it doesn't exist
+bin_dir = "bin"
+if not os.path.exists(bin_dir):
+    os.makedirs(bin_dir)
+
+# Source files
+sources = ["WFCChunk.cpp", "entry.cpp"]
+
+# Build the shared library
+library_path = os.path.join(bin_dir, library_name)
+library = env.SharedLibrary(target=library_path, source=sources)
+
+# Set default target
+Default(library)

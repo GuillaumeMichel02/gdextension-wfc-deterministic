@@ -1,0 +1,61 @@
+name: Build Godot GDExtension
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            platform: linux
+            arch: x86_64
+          - os: windows-latest
+            platform: windows
+            arch: x86_64
+          - os: windows-latest
+            platform: windows
+            arch: arm64
+          - os: macos-latest
+            platform: macos
+            arch: arm64
+          - os: macos-latest
+            platform: macos
+            arch: x86_64
+        target: [release]
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v3
+
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Install SCons
+        run: pip install scons
+
+      - name: Clone godot-cpp
+        run: |
+          git clone https://github.com/godotengine/godot-cpp.git
+          cd godot-cpp
+          scons platform=${{ matrix.platform }} generate_bindings=yes target=${{ matrix.target }} arch=${{ matrix.arch }}
+          cd ..
+
+      - name: Build GDExtension
+        run: |
+          scons platform=${{ matrix.platform }} target=${{ matrix.target }} arch=${{ matrix.arch }}
+      
+      - name: Upload built library
+        uses: actions/upload-artifact@v3
+        with:
+          name: build-${{ matrix.platform }}-${{ matrix.arch }}
+          path: |
+            bin/**/*.so
+            bin/**/*.dll
+            bin/**/*.dylib
