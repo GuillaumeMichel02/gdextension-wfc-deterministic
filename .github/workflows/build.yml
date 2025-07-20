@@ -15,19 +15,23 @@ jobs:
           - os: ubuntu-latest
             platform: linux
             arch: x86_64
+            target: template_release
           - os: windows-latest
             platform: windows
             arch: x86_64
+            target: template_release
           - os: windows-latest
             platform: windows
             arch: arm64
+            target: template_release
           - os: macos-13  # Intel-based runner for x86_64
             platform: macos
             arch: x86_64
+            target: template_release
           - os: macos-latest  # ARM64-based runner for arm64
             platform: macos
             arch: arm64
-        target: [template_release]
+            target: template_release
     runs-on: ${{ matrix.os }}
 
     steps:
