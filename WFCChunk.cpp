@@ -13,7 +13,7 @@ void WFCChunk::_bind_methods() {
     // Bind the generate() function with an integer seed argument
     ClassDB::bind_method(D_METHOD("generate", "seed"), &WFCChunk::generate);
 
-    // Bind the get_flat_grid() function to retrieve the grid
+    // Bind the get_flat_grid() function to retrieve the grid  
     ClassDB::bind_method(D_METHOD("get_flat_grid"), &WFCChunk::get_flat_grid);
 }
 
@@ -46,8 +46,8 @@ void WFCChunk::generate(int seed) {
 }
 
 // Return a flat 1D array representing the grid to GDScript
-TypedArray<int> WFCChunk::get_flat_grid() const {
-    TypedArray<int> result;
+TypedArray<int32_t> WFCChunk::get_flat_grid() const {
+    TypedArray<int32_t> result;
     result.resize(size * size);
 
     // Flatten 2D grid into 1D array (row-major order)

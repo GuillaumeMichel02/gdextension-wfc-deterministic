@@ -66,6 +66,28 @@ jobs:
         shell: bash
         run: |
           git clone --recursive https://github.com/godotengine/godot-cpp.git
+
+      - name: Get godot-cpp commit hash
+        id: godot-cpp-hash
+        shell: bash
+        run: |
+          cd godot-cpp
+          echo "hash=$(git rev-parse HEAD)" >> $GITHUB_OUTPUT
+
+      - name: Cache godot-cpp build
+        uses: actions/cache@v4
+        id: godot-cpp-cache
+        with:
+          path: godot-cpp/bin
+          key: godot-cpp-${{ matrix.platform }}-${{ matrix.arch }}-${{ matrix.target }}-${{ steps.godot-cpp-hash.outputs.hash }}
+          restore-keys: |
+            godot-cpp-${{ matrix.platform }}-${{ matrix.arch }}-${{ matrix.target }}-
+            godot-cpp-${{ matrix.platform }}-${{ matrix.arch }}-
+
+      - name: Build godot-cpp
+        if: steps.godot-cpp-cache.outputs.cache-hit != 'true'
+        shell: bash
+        run: |
           cd godot-cpp
           echo "Building godot-cpp for ${{ matrix.platform }} ${{ matrix.arch }}..."
           scons platform=${{ matrix.platform }} generate_bindings=yes target=${{ matrix.target }} arch=${{ matrix.arch }} -j2
@@ -75,7 +97,18 @@ jobs:
           else
             ls -la bin/
           fi
-          cd ..
+
+      - name: Show cached godot-cpp libraries
+        if: steps.godot-cpp-cache.outputs.cache-hit == 'true'
+        shell: bash
+        run: |
+          echo "Using cached godot-cpp libraries:"
+          cd godot-cpp
+          if [[ "${{ matrix.platform }}" == "windows" ]]; then
+            ls -la bin/ 2>/dev/null || echo "bin directory empty or missing on Windows"
+          else
+            ls -la bin/
+          fi
 
       - name: Build GDExtension
         shell: bash

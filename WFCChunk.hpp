@@ -32,7 +32,7 @@ public:
     void generate(int seed);
 
     // Return the flattened grid to GDScript as a 1D array
-    TypedArray<int> get_flat_grid() const;
+    TypedArray<int32_t> get_flat_grid() const;
 };
 
 } // namespace godot
