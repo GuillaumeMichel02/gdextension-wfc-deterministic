@@ -132,6 +132,11 @@ sources = ["WFCChunk.cpp", "entry.cpp"]
 
 # Build the shared library
 library_path = os.path.join(bin_dir, library_name)
+
+# Remove the automatic "lib" prefix that SCons adds on Unix systems
+if platform != "windows":
+    env["SHLIBPREFIX"] = ""
+
 library = env.SharedLibrary(target=library_path, source=sources)
 
 print(f"=== Build Summary ===")
