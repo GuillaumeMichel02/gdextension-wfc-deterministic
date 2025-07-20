@@ -12,10 +12,10 @@ jobs:
       fail-fast: false  # Don't cancel other builds if one fails
       matrix:
         include:
-          #- os: ubuntu-latest
-          #  platform: linux
-          #  arch: x86_64
-          #  target: template_release
+          # - os: ubuntu-latest
+          #   platform: linux
+          #   arch: x86_64
+          #   target: template_release
           - os: windows-latest
             platform: windows
             arch: x86_64
@@ -24,14 +24,14 @@ jobs:
             platform: windows
             arch: arm64
             target: template_release
-          #- os: macos-13  # Intel-based runner for x86_64
-          #  platform: macos
-          #  arch: x86_64
-          #  target: template_release
-          #- os: macos-latest  # ARM64-based runner for arm64
-          #  platform: macos
-          #  arch: arm64
-          #  target: template_release
+          # - os: macos-13  # Intel-based runner for x86_64
+          #   platform: macos
+          #   arch: x86_64
+          #   target: template_release
+          # - os: macos-latest  # ARM64-based runner for arm64
+          #   platform: macos
+          #   arch: arm64
+          #   target: template_release
     runs-on: ${{ matrix.os }}
 
     steps:
@@ -63,6 +63,7 @@ jobs:
           fi
 
       - name: Clone godot-cpp
+        shell: bash
         run: |
           git clone --recursive https://github.com/godotengine/godot-cpp.git
           cd godot-cpp
@@ -70,19 +71,20 @@ jobs:
           scons platform=${{ matrix.platform }} generate_bindings=yes target=${{ matrix.target }} arch=${{ matrix.arch }} -j2
           echo "Listing built libraries:"
           if [[ "${{ matrix.platform }}" == "windows" ]]; then
-            dir bin
+            ls -la bin/ 2>/dev/null || echo "bin directory empty or missing on Windows"
           else
             ls -la bin/
           fi
           cd ..
 
       - name: Build GDExtension
+        shell: bash
         run: |
           echo "Building GDExtension for ${{ matrix.platform }} ${{ matrix.arch }}..."
           scons platform=${{ matrix.platform }} target=${{ matrix.target }} arch=${{ matrix.arch }} -j2
           echo "Listing built files:"
           if [[ "${{ matrix.platform }}" == "windows" ]]; then
-            dir bin
+            ls bin/ || dir bin
           else
             ls -la bin/
           fi
