@@ -3,7 +3,7 @@ import sys
 
 # Get build parameters
 platform = ARGUMENTS.get("platform", "")
-target = ARGUMENTS.get("target", "release")
+target = ARGUMENTS.get("target", "template_release")
 
 # Auto-detect platform if not specified
 if platform == "":
@@ -13,6 +13,14 @@ if platform == "":
         platform = "macos"
     else:
         platform = "linux"
+
+# Map new target names to old ones for library naming
+if target == "template_release":
+    lib_target = "release"
+elif target == "template_debug":
+    lib_target = "debug"
+else:
+    lib_target = target
 
 # Setup environment
 env = Environment()
@@ -32,11 +40,11 @@ env.Append(CPPPATH=[
 env.Append(CXXFLAGS=["-std=c++17"])
 
 # Debug/Release flags
-if target == "debug":
+if target == "template_debug":
     env.Append(CXXFLAGS=["-g", "-O0", "-DDEBUG_ENABLED"])
     if platform != "windows":
         env.Append(CXXFLAGS=["-fno-omit-frame-pointer"])
-else:  # release
+else:  # template_release or release
     env.Append(CXXFLAGS=["-O3", "-DNDEBUG"])
     if platform != "windows":
         env.Append(CXXFLAGS=["-fomit-frame-pointer"])
@@ -48,7 +56,7 @@ if platform == "windows":
     
     # Architecture detection
     target_arch = ARGUMENTS.get("arch", "x86_64")
-    library_name = f"wfc.{target}.{target_arch}.dll"
+    library_name = f"wfc.{lib_target}.{target_arch}.dll"
     
     # Link godot-cpp
     godot_cpp_lib = f"godot-cpp.{platform}.{target}.{target_arch}"
@@ -61,7 +69,7 @@ elif platform == "macos":
     
     # Architecture detection
     target_arch = ARGUMENTS.get("arch", "arm64")  # Default to arm64 for Apple Silicon
-    library_name = f"wfc.{target}.{target_arch}.dylib"
+    library_name = f"wfc.{lib_target}.{target_arch}.dylib"
     
     # Link godot-cpp
     godot_cpp_lib = f"libgodot-cpp.{platform}.{target}.{target_arch}.a"
@@ -73,7 +81,7 @@ else:  # linux
     
     # Architecture detection
     target_arch = ARGUMENTS.get("arch", "x86_64")
-    library_name = f"wfc.{target}.{target_arch}.so"
+    library_name = f"wfc.{lib_target}.{target_arch}.so"
     
     # Link godot-cpp
     godot_cpp_lib = f"libgodot-cpp.{platform}.{target}.{target_arch}.a"
