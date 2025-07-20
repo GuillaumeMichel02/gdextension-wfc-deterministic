@@ -20,12 +20,12 @@ jobs:
           - os: windows-latest
             platform: windows
             arch: arm64
-          - os: macos-latest
-            platform: macos
-            arch: arm64
-          - os: macos-latest
+          - os: macos-13  # Intel-based runner for x86_64
             platform: macos
             arch: x86_64
+          - os: macos-latest  # ARM64-based runner for arm64
+            platform: macos
+            arch: arm64
         target: [template_release]
     runs-on: ${{ matrix.os }}
 
