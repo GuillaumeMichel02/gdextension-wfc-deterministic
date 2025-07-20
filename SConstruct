@@ -43,18 +43,21 @@ env.Append(CPPPATH=[
     os.path.join(godot_cpp_path, "gdextension")
 ])
 
-# C++ standard
-env.Append(CXXFLAGS=["-std=c++17"])
-
-# Debug/Release flags
-if target == "template_debug":
-    env.Append(CXXFLAGS=["-g", "-O0", "-DDEBUG_ENABLED"])
-    if platform != "windows":
-        env.Append(CXXFLAGS=["-fno-omit-frame-pointer"])
-else:  # template_release or release
-    env.Append(CXXFLAGS=["-O3", "-DNDEBUG"])
-    if platform != "windows":
-        env.Append(CXXFLAGS=["-fomit-frame-pointer"])
+# C++ standard and compiler flags
+if platform == "windows":
+    # MSVC flags
+    env.Append(CXXFLAGS=["/std:c++17"])
+    if target == "template_debug":
+        env.Append(CXXFLAGS=["/Zi", "/Od", "/DDEBUG_ENABLED"])
+    else:  # template_release or release
+        env.Append(CXXFLAGS=["/O2", "/DNDEBUG"])
+else:
+    # GCC/Clang flags for Unix platforms
+    env.Append(CXXFLAGS=["-std=c++17"])
+    if target == "template_debug":
+        env.Append(CXXFLAGS=["-g", "-O0", "-DDEBUG_ENABLED", "-fno-omit-frame-pointer"])
+    else:  # template_release or release
+        env.Append(CXXFLAGS=["-O3", "-DNDEBUG", "-fomit-frame-pointer"])
 
 # Platform-specific settings
 if platform == "windows":
