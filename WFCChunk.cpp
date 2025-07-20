@@ -10,10 +10,8 @@ using namespace godot;
 
 // This function registers the methods that GDScript can call
 void WFCChunk::_bind_methods() {
-    // Bind the generate() function with an integer seed argument
+    // Try the standard approach but ensure proper includes
     ClassDB::bind_method(D_METHOD("generate", "seed"), &WFCChunk::generate);
-
-    // Bind the get_flat_grid() function to retrieve the grid  
     ClassDB::bind_method(D_METHOD("get_flat_grid"), &WFCChunk::get_flat_grid);
 }
 
