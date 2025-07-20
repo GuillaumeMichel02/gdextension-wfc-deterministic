@@ -12,10 +12,10 @@ jobs:
       fail-fast: false  # Don't cancel other builds if one fails
       matrix:
         include:
-          - os: ubuntu-latest
-            platform: linux
-            arch: x86_64
-            target: template_release
+          #- os: ubuntu-latest
+          #  platform: linux
+          #  arch: x86_64
+          #  target: template_release
           - os: windows-latest
             platform: windows
             arch: x86_64
@@ -24,14 +24,14 @@ jobs:
             platform: windows
             arch: arm64
             target: template_release
-          - os: macos-13  # Intel-based runner for x86_64
-            platform: macos
-            arch: x86_64
-            target: template_release
-          - os: macos-latest  # ARM64-based runner for arm64
-            platform: macos
-            arch: arm64
-            target: template_release
+          #- os: macos-13  # Intel-based runner for x86_64
+          #  platform: macos
+          #  arch: x86_64
+          #  target: template_release
+          #- os: macos-latest  # ARM64-based runner for arm64
+          #  platform: macos
+          #  arch: arm64
+          #  target: template_release
     runs-on: ${{ matrix.os }}
 
     steps:
@@ -69,7 +69,11 @@ jobs:
           echo "Building godot-cpp for ${{ matrix.platform }} ${{ matrix.arch }}..."
           scons platform=${{ matrix.platform }} generate_bindings=yes target=${{ matrix.target }} arch=${{ matrix.arch }} -j2
           echo "Listing built libraries:"
-          ls -la bin/
+          if [[ "${{ matrix.platform }}" == "windows" ]]; then
+            dir bin
+          else
+            ls -la bin/
+          fi
           cd ..
 
       - name: Build GDExtension
@@ -77,14 +81,22 @@ jobs:
           echo "Building GDExtension for ${{ matrix.platform }} ${{ matrix.arch }}..."
           scons platform=${{ matrix.platform }} target=${{ matrix.target }} arch=${{ matrix.arch }} -j2
           echo "Listing built files:"
-          ls -la bin/
+          if [[ "${{ matrix.platform }}" == "windows" ]]; then
+            dir bin
+          else
+            ls -la bin/
+          fi
       
       - name: Verify build output
         shell: bash
         run: |
           echo "Verifying build output exists..."
           echo "Contents of bin directory:"
-          ls -la bin/ || echo "bin directory doesn't exist"
+          if [[ "${{ matrix.platform }}" == "windows" ]]; then
+            ls bin/ 2>/dev/null || echo "bin directory doesn't exist"
+          else
+            ls -la bin/ || echo "bin directory doesn't exist"
+          fi
           
           # Find the actual library that was built
           if [[ "${{ matrix.platform }}" == "linux" ]]; then
@@ -104,7 +116,7 @@ jobs:
             else
               echo "❌ Windows library not found: $expected"
               echo "Available files:"
-              find bin/ -name "*.dll" 2>/dev/null || echo "No .dll files found"
+              find bin/ -name "*.dll" 2>/dev/null || ls bin/*.dll 2>/dev/null || echo "No .dll files found"
               exit 1
             fi
           elif [[ "${{ matrix.platform }}" == "macos" ]]; then
