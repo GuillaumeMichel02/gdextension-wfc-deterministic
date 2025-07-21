@@ -145,7 +145,8 @@ jobs:
           # Clone godot-cpp if not already present
           if [[ ! -d "godot-cpp" ]]; then
             echo "Cloning godot-cpp..."
-            git clone --recursive --depth 1 https://github.com/godotengine/godot-cpp.git
+            # Pin to godot-4.3-stable for better Windows ARM64 MSVC compatibility
+            git clone --recursive --depth 1 -b godot-4.3-stable https://github.com/godotengine/godot-cpp.git
             cd godot-cpp
             # Ensure submodules are properly initialized
             git submodule update --init --recursive
@@ -172,11 +173,13 @@ jobs:
         uses: actions/cache@v4
         id: godot-cpp-cache
         with:
-          path: godot-cpp/bin
-          key: godot-cpp-${{ matrix.platform }}-${{ matrix.arch }}-${{ matrix.target }}-${{ steps.setup-godot-cpp.outputs.hash }}
+          path: |
+            godot-cpp/bin
+            godot-cpp/gen
+          key: godot-cpp-${{ matrix.platform }}-${{ matrix.arch }}-${{ matrix.target }}-flags-${{ matrix.flags }}-${{ steps.setup-godot-cpp.outputs.hash }}
           restore-keys: |
+            godot-cpp-${{ matrix.platform }}-${{ matrix.arch }}-${{ matrix.target }}-flags-${{ matrix.flags }}-
             godot-cpp-${{ matrix.platform }}-${{ matrix.arch }}-${{ matrix.target }}-
-            godot-cpp-${{ matrix.platform }}-${{ matrix.arch }}-
 
       - name: Build godot-cpp
         if: steps.godot-cpp-cache.outputs.cache-hit != 'true'
@@ -208,6 +211,15 @@ jobs:
           fi
           echo "Available libraries:"
           ls -la bin/ 2>/dev/null || echo "No libraries found"
+          echo "Generated headers:"
+          ls -la gen/include/godot_cpp/classes/ 2>/dev/null | head -10 || echo "No generated class headers found"
+          
+          # Check for the specific header our extension needs
+          if [[ -f "gen/include/godot_cpp/classes/ref_counted.hpp" ]]; then
+            echo "✅ RefCounted header found"
+          else
+            echo "❌ RefCounted header missing - need to rebuild with bindings"
+          fi
 
       - name: Build WFC GDExtension
         shell: bash

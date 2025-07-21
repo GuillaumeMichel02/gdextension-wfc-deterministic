@@ -51,6 +51,25 @@ if platform == "windows":
     if use_mingw:
         # MinGW flags (GCC-style)
         env.Append(CXXFLAGS=["-std=c++17"])
+        # Add Windows-specific defines for MinGW
+        env.Append(CPPDEFINES=["WIN32", "_WIN32", "__MINGW32__", "NOMINMAX"])
+        # Fix MinGW linker issues: multiple definitions, missing math/thread functions, missing operator new/delete
+        env.Append(LINKFLAGS=[
+            "-static-libgcc", 
+            "-static-libstdc++",
+            "-Wl,--allow-multiple-definition",  # Allow multiple definitions
+            "-lm",  # Link math library for math functions
+            "-lpthread",  # Link pthread for threading functions
+            "-lmingw32",  # MinGW runtime
+            "-lgcc_s",  # GCC support library
+            "-lmoldname",  # C runtime functions
+            "-lmsvcrt"  # Microsoft C runtime for printf functions
+        ])
+        # Add compiler flags to reduce symbol conflicts
+        env.Append(CXXFLAGS=[
+            "-fvisibility=hidden",  # Hide symbols by default
+            "-fvisibility-inlines-hidden"  # Hide inline symbols
+        ])
         if target == "template_debug":
             env.Append(CXXFLAGS=["-g", "-O0", "-DDEBUG_ENABLED"])
         else:  # template_release or release
@@ -58,6 +77,11 @@ if platform == "windows":
     else:
         # MSVC flags
         env.Append(CXXFLAGS=["/std:c++17"])
+        # Add ARM64-specific MSVC flags if building for ARM64
+        if ARGUMENTS.get("arch", "x86_64") == "arm64":
+            env.Append(CXXFLAGS=["/arch:ARM64", "/D_ARM64_"])
+            # Add workaround for ARM64 method binding issues
+            env.Append(CXXFLAGS=["/D_ALLOW_ITERATOR_DEBUG_LEVEL_MISMATCH", "/D_ALLOW_RUNTIME_LIBRARY_MISMATCH"])
         if target == "template_debug":
             env.Append(CXXFLAGS=["/Zi", "/Od", "/DDEBUG_ENABLED"])
         else:  # template_release or release
@@ -79,6 +103,8 @@ if platform == "windows":
         # Only add MSVC-specific flags when NOT using MinGW
         env.Append(CXXFLAGS=["/MD"])
         env.Append(LINKFLAGS=["/WX:NO"])
+        # Add Windows-specific defines for MSVC
+        env.Append(CPPDEFINES=["WIN32", "_WIN32", "NOMINMAX"])
     
     # Architecture detection
     target_arch = ARGUMENTS.get("arch", "x86_64")
@@ -127,7 +153,35 @@ elif platform == "macos":
 
 elif platform == "web":
     # Web/WebAssembly platform using Emscripten
-    env.Append(CXXFLAGS=["-fPIC"])
+    print("Configuring for Web/WebAssembly platform with Emscripten")
+    
+    # Check for Emscripten tools
+    import shutil
+    emcc_path = shutil.which("emcc")
+    if not emcc_path:
+        print("ERROR: emcc not found! Make sure Emscripten SDK is installed and activated.")
+        Exit(1)
+    
+    print(f"Found Emscripten compiler: {emcc_path}")
+    
+    # Configure Emscripten toolchain
+    env['CC'] = 'emcc'
+    env['CXX'] = 'em++'
+    env['AR'] = 'emar'
+    env['LINK'] = 'em++'
+    
+    # Emscripten-specific C++ flags (similar to Unix but with Web-specific additions)
+    env.Append(CXXFLAGS=["-std=c++17", "-fPIC"])
+    if target == "template_debug":
+        env.Append(CXXFLAGS=["-g", "-O0", "-DDEBUG_ENABLED"])
+    else:  # template_release or release
+        env.Append(CXXFLAGS=["-O3", "-DNDEBUG"])
+    
+    # Emscripten-specific linker flags
+    env.Append(LINKFLAGS=[
+        "-s", "SIDE_MODULE=1",  # Create a side module that can be loaded by Godot
+        "-s", "EXPORT_ALL=1"    # Export all symbols
+    ])
     
     # Architecture is always wasm32 for web
     target_arch = ARGUMENTS.get("arch", "wasm32")
