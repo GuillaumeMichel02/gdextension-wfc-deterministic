@@ -24,42 +24,42 @@ jobs:
             arch: x86_64
             target: template_release
             artifact_ext: dll
-            flags: "use_mingw=yes"
+            flags: "use_mingw=yes generate_template_get_node=no"
           - name: Windows (arm64, MSVC) - Release
             os: windows-latest
             platform: windows
             arch: arm64
             target: template_release
             artifact_ext: dll
-            flags: ""
+            flags: "generate_template_get_node=no"
           - name: Linux (x86_64) - Release
             os: ubuntu-latest
             platform: linux
             arch: x86_64
             target: template_release
             artifact_ext: so
-            flags: ""
+            flags: "generate_template_get_node=no"
           - name: macOS (x86_64) - Release
             os: macos-13
             platform: macos
             arch: x86_64
             target: template_release
             artifact_ext: dylib
-            flags: ""
+            flags: "generate_template_get_node=no"
           - name: macOS (arm64) - Release
             os: macos-latest
             platform: macos
             arch: arm64
             target: template_release
             artifact_ext: dylib
-            flags: ""
+            flags: "generate_template_get_node=no"
           - name: Web (wasm32) - Release
             os: ubuntu-latest
             platform: web
             arch: wasm32
             target: template_release
             artifact_ext: wasm
-            flags: ""
+            flags: "generate_template_get_node=no"
 
     steps:
       - name: Checkout
@@ -189,7 +189,11 @@ jobs:
           
           cd godot-cpp
           echo "Building godot-cpp for ${{ matrix.platform }} ${{ matrix.arch }}..."
-          scons platform=${{ matrix.platform }} target=${{ matrix.target }} arch=${{ matrix.arch }} -j2 ${{ matrix.flags }}
+          # Use optimized build flags for faster compilation
+          scons platform=${{ matrix.platform }} target=${{ matrix.target }} arch=${{ matrix.arch }} \
+            optimize=speed \
+            debug_symbols=no \
+            -j4 ${{ matrix.flags }}
           echo "Built godot-cpp libraries:"
           ls -la bin/ || echo "No bin directory yet"
 
@@ -220,7 +224,10 @@ jobs:
           ls -la godot-cpp/bin/ 2>/dev/null || echo "No godot-cpp libraries found"
           
           # Build the extension
-          scons platform=${{ matrix.platform }} target=${{ matrix.target }} arch=${{ matrix.arch }} -j2 ${{ matrix.flags }}
+          scons platform=${{ matrix.platform }} target=${{ matrix.target }} arch=${{ matrix.arch }} \
+            optimize=speed \
+            debug_symbols=no \
+            -j4 ${{ matrix.flags }}
           
           echo "Build complete. Generated files:"
           ls -la bin/
