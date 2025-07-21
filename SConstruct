@@ -52,7 +52,12 @@ if platform == "windows":
         # MinGW flags (GCC-style)
         env.Append(CXXFLAGS=["-std=c++17"])
         # Add Windows-specific defines for MinGW
-        env.Append(CPPDEFINES=["WIN32", "_WIN32", "__MINGW32__", "NOMINMAX"])
+        env.Append(CPPDEFINES=[
+            "WIN32", "_WIN32", "__MINGW32__", "NOMINMAX",
+            # Fix MinGW DLL export issues
+            "__DECLSPEC_SUPPORTED",  # Enable __declspec support in MinGW
+            "_WINDLL"                # Define Windows DLL context
+        ])
         # Fix MinGW linker issues: multiple definitions, missing math/thread functions, missing operator new/delete
         env.Append(LINKFLAGS=[
             "-static-libgcc", 
