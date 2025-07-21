@@ -1,0 +1,238 @@
+name: 🚀 Cross-Platform GDExtension Build
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+env:
+  SCONS_CACHE: ${{ github.workspace }}/.scons-cache/
+
+jobs:
+  # All builds using Docker for consistent cross-compilation
+  cross-builds:
+    runs-on: ubuntu-latest
+    container: 
+      image: ponders/godot-cpp-ci:3.4.2
+    name: ${{ matrix.name }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Windows (x86_64, MinGW) - Release
+            platform: windows
+            arch: x86_64
+            target: template_release
+            artifact_ext: dll
+            flags: "use_mingw=yes"
+          - name: Windows (arm64, MinGW) - Release
+            platform: windows
+            arch: arm64
+            target: template_release
+            artifact_ext: dll
+            flags: "use_mingw=yes"
+          - name: Linux (x86_64) - Release
+            platform: linux
+            arch: x86_64
+            target: template_release
+            artifact_ext: so
+            flags: ""
+          - name: macOS (x86_64) - Release
+            platform: macos
+            arch: x86_64
+            target: template_release
+            artifact_ext: dylib
+            flags: ""
+          - name: macOS (arm64) - Release
+            platform: macos
+            arch: arm64
+            target: template_release
+            artifact_ext: dylib
+            flags: ""
+          - name: Web (wasm32) - Release
+            platform: web
+            arch: wasm32
+            target: template_release
+            artifact_ext: wasm
+            flags: ""
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup godot-cpp
+        id: setup-godot-cpp
+        run: |
+          # Clone godot-cpp if not already present
+          if [[ ! -d "godot-cpp" ]]; then
+            echo "Cloning godot-cpp..."
+            git clone --recursive --depth 1 https://github.com/godotengine/godot-cpp.git
+          else
+            echo "godot-cpp already exists"
+          fi
+          
+          # Get the commit hash for cache key
+          cd godot-cpp
+          hash=$(git rev-parse HEAD)
+          echo "hash=${hash}" >> $GITHUB_OUTPUT
+          echo "Godot-cpp commit: ${hash}"
+
+      - name: Cache godot-cpp build  
+        uses: actions/cache@v4
+        id: godot-cpp-cache
+        with:
+          path: godot-cpp/bin
+          key: godot-cpp-${{ matrix.platform }}-${{ matrix.arch }}-${{ matrix.target }}-${{ steps.setup-godot-cpp.outputs.hash }}
+          restore-keys: |
+            godot-cpp-${{ matrix.platform }}-${{ matrix.arch }}-${{ matrix.target }}-
+            godot-cpp-${{ matrix.platform }}-${{ matrix.arch }}-
+
+      - name: Build godot-cpp
+        if: steps.godot-cpp-cache.outputs.cache-hit != 'true'
+        run: |
+          cd godot-cpp
+          echo "Building godot-cpp for ${{ matrix.platform }} ${{ matrix.arch }}..."
+          scons platform=${{ matrix.platform }} target=${{ matrix.target }} arch=${{ matrix.arch }} -j2 ${{ matrix.flags }}
+          echo "Built godot-cpp libraries:"
+          ls -la bin/ || echo "No bin directory yet"
+
+      - name: Show godot-cpp cache status
+        run: |
+          cd godot-cpp
+          if [[ "${{ steps.godot-cpp-cache.outputs.cache-hit }}" == "true" ]]; then
+            echo "✅ Using cached godot-cpp libraries for ${{ matrix.platform }} ${{ matrix.arch }}"
+          else
+            echo "🔨 Built fresh godot-cpp libraries for ${{ matrix.platform }} ${{ matrix.arch }}"
+          fi
+          echo "Available libraries:"
+          ls -la bin/ 2>/dev/null || echo "No libraries found"
+
+      - name: Build WFC GDExtension
+        run: |
+          mkdir -p bin
+          echo "Building WFC GDExtension for ${{ matrix.platform }} ${{ matrix.arch }}..."
+          echo "Working directory: $(pwd)"
+          echo "godot-cpp status:"
+          ls -la godot-cpp/bin/ 2>/dev/null || echo "No godot-cpp libraries found"
+          
+          # Build the extension
+          scons platform=${{ matrix.platform }} target=${{ matrix.target }} arch=${{ matrix.arch }} -j2 ${{ matrix.flags }}
+          
+          echo "Build complete. Generated files:"
+          ls -la bin/
+
+      - name: Verify build output
+        run: |
+          expected="bin/wfc.release.${{ matrix.arch }}.${{ matrix.artifact_ext }}"
+          echo "Looking for: $expected"
+          
+          if [[ -f "$expected" ]]; then
+            echo "✅ ${{ matrix.platform }} library found: $expected"
+            echo "File size: $(stat -c%s "$expected") bytes"
+            
+            # Additional verification for Windows DLLs
+            if [[ "${{ matrix.platform }}" == "windows" ]]; then
+              echo "Verifying Windows DLL..."
+              file "$expected" 2>/dev/null || echo "file command not available"
+            fi
+          else
+            echo "❌ ${{ matrix.platform }} library not found: $expected"
+            echo "Available files in bin/:"
+            find bin/ -name "*.${{ matrix.artifact_ext }}" 2>/dev/null || echo "No .${{ matrix.artifact_ext }} files found"
+            echo "All files in bin/:"
+            ls -la bin/ 2>/dev/null || echo "bin directory not found"
+            echo "Current directory contents:"
+            ls -la
+            exit 1
+          fi
+
+      - name: Upload built library
+        uses: actions/upload-artifact@v4
+        with:
+          name: wfc-${{ matrix.platform }}-${{ matrix.arch }}
+          path: bin/*.${{ matrix.artifact_ext }}
+          if-no-files-found: error
+
+  # Collect all artifacts and create a release-ready package
+  package-release:
+    needs: [cross-builds]
+    runs-on: ubuntu-latest
+    name: 📦 Package Release
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Package release
+        run: |
+          mkdir -p release/bin
+          
+          # Copy all built libraries to release directory
+          find artifacts/ -name "*.dll" -exec cp {} release/bin/ \;
+          find artifacts/ -name "*.so" -exec cp {} release/bin/ \;
+          find artifacts/ -name "*.dylib" -exec cp {} release/bin/ \;
+          
+          # Copy extension configuration and other files
+          cp wfc.gdextension release/
+          cp README.md release/ 2>/dev/null || echo "README.md not found"
+          cp LICENSE release/ 2>/dev/null || echo "LICENSE not found"
+          
+          echo "Release package contents:"
+          find release/ -type f | sort
+          
+          # Create archive
+          tar -czf wfc-gdextension-cross-platform.tar.gz -C release .
+          
+          echo "📦 Release package created: wfc-gdextension-cross-platform.tar.gz"
+          echo "Package size: $(stat -c%s wfc-gdextension-cross-platform.tar.gz) bytes"
+
+      - name: Upload release package
+        uses: actions/upload-artifact@v4
+        with:
+          name: wfc-gdextension-release
+          path: |
+            wfc-gdextension-cross-platform.tar.gz
+            release/
+          if-no-files-found: error
+
+      - name: Display build summary
+        run: |
+          echo "## 🎉 Cross-Platform Build Complete!" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Built Libraries:" >> $GITHUB_STEP_SUMMARY
+          echo "| Platform | Architecture | File |" >> $GITHUB_STEP_SUMMARY
+          echo "|----------|-------------|------|" >> $GITHUB_STEP_SUMMARY
+          
+          for file in release/bin/*; do
+            if [[ -f "$file" ]]; then
+              filename=$(basename "$file")
+              case "$filename" in
+                *.dll) platform="Windows" ;;
+                *.so) platform="Linux" ;;
+                *.dylib) platform="macOS" ;;
+                *) platform="Unknown" ;;
+              esac
+              
+              if [[ "$filename" =~ x86_64 ]]; then
+                arch="x86_64"
+              elif [[ "$filename" =~ arm64 ]]; then
+                arch="arm64"
+              else
+                arch="Unknown"
+              fi
+              
+              size=$(stat -c%s "$file")
+              echo "| $platform | $arch | \`$filename\` (${size} bytes) |" >> $GITHUB_STEP_SUMMARY
+            fi
+          done
+          
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### 📥 Download:" >> $GITHUB_STEP_SUMMARY
+          echo "- **Release Package**: \`wfc-gdextension-release\` artifact" >> $GITHUB_STEP_SUMMARY
+          echo "- **Individual Builds**: Individual platform artifacts" >> $GITHUB_STEP_SUMMARY
