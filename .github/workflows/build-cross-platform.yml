@@ -68,12 +68,24 @@ jobs:
           if [[ ! -d "godot-cpp" ]]; then
             echo "Cloning godot-cpp..."
             git clone --recursive --depth 1 https://github.com/godotengine/godot-cpp.git
+            cd godot-cpp
+            # Ensure submodules are properly initialized
+            git submodule update --init --recursive
           else
             echo "godot-cpp already exists"
+            cd godot-cpp
+            # Update submodules if they exist but aren't initialized
+            git submodule update --init --recursive
+          fi
+          
+          # Verify SConstruct file exists
+          if [[ ! -f "SConstruct" ]]; then
+            echo "ERROR: SConstruct not found in godot-cpp!"
+            ls -la
+            exit 1
           fi
           
           # Get the commit hash for cache key
-          cd godot-cpp
           hash=$(git rev-parse HEAD)
           echo "hash=${hash}" >> $GITHUB_OUTPUT
           echo "Godot-cpp commit: ${hash}"
@@ -177,6 +189,7 @@ jobs:
           find artifacts/ -name "*.dll" -exec cp {} release/bin/ \;
           find artifacts/ -name "*.so" -exec cp {} release/bin/ \;
           find artifacts/ -name "*.dylib" -exec cp {} release/bin/ \;
+          find artifacts/ -name "*.wasm" -exec cp {} release/bin/ \;
           
           # Copy extension configuration and other files
           cp wfc.gdextension release/
@@ -216,6 +229,7 @@ jobs:
                 *.dll) platform="Windows" ;;
                 *.so) platform="Linux" ;;
                 *.dylib) platform="macOS" ;;
+                *.wasm) platform="Web" ;;
                 *) platform="Unknown" ;;
               esac
               
@@ -223,6 +237,8 @@ jobs:
                 arch="x86_64"
               elif [[ "$filename" =~ arm64 ]]; then
                 arch="arm64"
+              elif [[ "$filename" =~ wasm32 ]]; then
+                arch="wasm32"
               else
                 arch="Unknown"
               fi

@@ -125,6 +125,24 @@ elif platform == "macos":
     env.Append(LIBPATH=[godot_cpp_lib_path])
     env.Append(LIBS=[File(godot_cpp_lib_path_full)])
 
+elif platform == "web":
+    # Web/WebAssembly platform using Emscripten
+    env.Append(CXXFLAGS=["-fPIC"])
+    
+    # Architecture is always wasm32 for web
+    target_arch = ARGUMENTS.get("arch", "wasm32")
+    library_name = f"wfc.{lib_target}.{target_arch}.wasm"
+    
+    # Link godot-cpp
+    godot_cpp_lib = f"libgodot-cpp.{platform}.{target}.{target_arch}.a"
+    godot_cpp_lib_path_full = os.path.join(godot_cpp_lib_path, godot_cpp_lib)
+    
+    print(f"Building for Web {target_arch}")
+    print(f"Looking for godot-cpp library: {godot_cpp_lib_path_full}")
+    
+    env.Append(LIBPATH=[godot_cpp_lib_path])
+    env.Append(LIBS=[File(godot_cpp_lib_path_full)])
+
 else:  # linux
     env.Append(CXXFLAGS=["-fPIC"])
     
