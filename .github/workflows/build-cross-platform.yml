@@ -12,43 +12,49 @@ env:
 jobs:
   # Cross-platform builds using modern toolchains
   cross-builds:
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.os }}
     name: ${{ matrix.name }}
     strategy:
       fail-fast: false
       matrix:
         include:
           - name: Windows (x86_64, MinGW) - Release
+            os: ubuntu-latest
             platform: windows
             arch: x86_64
             target: template_release
             artifact_ext: dll
             flags: "use_mingw=yes"
-          - name: Windows (arm64, MinGW) - Release
+          - name: Windows (arm64, MSVC) - Release
+            os: windows-latest
             platform: windows
             arch: arm64
             target: template_release
             artifact_ext: dll
-            flags: "use_mingw=yes"
+            flags: ""
           - name: Linux (x86_64) - Release
+            os: ubuntu-latest
             platform: linux
             arch: x86_64
             target: template_release
             artifact_ext: so
             flags: ""
           - name: macOS (x86_64) - Release
+            os: macos-13
             platform: macos
             arch: x86_64
             target: template_release
             artifact_ext: dylib
             flags: ""
           - name: macOS (arm64) - Release
+            os: macos-latest
             platform: macos
             arch: arm64
             target: template_release
             artifact_ext: dylib
             flags: ""
           - name: Web (wasm32) - Release
+            os: ubuntu-latest
             platform: web
             arch: wasm32
             target: template_release
@@ -58,6 +64,18 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: System info
+        shell: bash
+        run: |
+          echo "=== System Information ==="
+          echo "Runner OS: ${{ runner.os }}"
+          echo "Matrix OS: ${{ matrix.os }}"
+          echo "Platform: ${{ matrix.platform }}"
+          echo "Architecture: ${{ matrix.arch }}"
+          echo "System: $(uname -a)"
+          echo "PWD: $(pwd)"
+          echo "=========================="
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -70,31 +88,50 @@ jobs:
           scons --version
 
       - name: Install cross-compilation tools
+        shell: bash
         run: |
-          sudo apt-get update
-          case "${{ matrix.platform }}" in
-            "windows")
-              sudo apt-get install -y gcc-mingw-w64 g++-mingw-w64
+          echo "Running on: ${{ matrix.os }}"
+          echo "Platform: ${{ matrix.platform }}"
+          echo "Architecture: ${{ matrix.arch }}"
+          echo "Current OS: $(uname -a)"
+          
+          case "${{ matrix.os }}" in
+            "ubuntu-latest")
+              sudo apt-get update
+              case "${{ matrix.platform }}" in
+                "windows")
+                  # For Windows x86_64 from Ubuntu
+                  sudo apt-get install -y gcc-mingw-w64-x86-64 g++-mingw-w64-x86-64
+                  ;;
+                "linux")
+                  sudo apt-get install -y build-essential
+                  ;;
+                "web")
+                  # Install Emscripten
+                  git clone https://github.com/emscripten-core/emsdk.git
+                  cd emsdk
+                  ./emsdk install latest
+                  ./emsdk activate latest
+                  source ./emsdk_env.sh
+                  cd ..
+                  ;;
+              esac
               ;;
-            "linux")
-              sudo apt-get install -y build-essential
+            "windows-latest")
+              # Windows native build - no additional tools needed
+              echo "Using native Windows tools for ${{ matrix.platform }} ${{ matrix.arch }}"
               ;;
-            "macos")
-              sudo apt-get install -y clang
-              ;;
-            "web")
-              # Install Emscripten
-              git clone https://github.com/emscripten-core/emsdk.git
-              cd emsdk
-              ./emsdk install latest
-              ./emsdk activate latest
-              source ./emsdk_env.sh
-              cd ..
+            "macos-"*)
+              # macOS native build - no additional tools needed
+              echo "Using native macOS tools for ${{ matrix.platform }} ${{ matrix.arch }}"
+              # Install Xcode command line tools if needed
+              xcode-select --install 2>/dev/null || echo "Xcode tools already installed"
               ;;
           esac
 
       - name: Setup Emscripten (Web only)
         if: matrix.platform == 'web'
+        shell: bash
         run: |
           source ./emsdk/emsdk_env.sh
           echo "EMSDK=$(pwd)/emsdk" >> $GITHUB_ENV
@@ -103,6 +140,7 @@ jobs:
 
       - name: Setup godot-cpp
         id: setup-godot-cpp
+        shell: bash
         run: |
           # Clone godot-cpp if not already present
           if [[ ! -d "godot-cpp" ]]; then
@@ -142,6 +180,7 @@ jobs:
 
       - name: Build godot-cpp
         if: steps.godot-cpp-cache.outputs.cache-hit != 'true'
+        shell: bash
         run: |
           # Setup environment for Web builds
           if [[ "${{ matrix.platform }}" == "web" ]]; then
@@ -155,6 +194,7 @@ jobs:
           ls -la bin/ || echo "No bin directory yet"
 
       - name: Show godot-cpp cache status
+        shell: bash
         run: |
           cd godot-cpp
           if [[ "${{ steps.godot-cpp-cache.outputs.cache-hit }}" == "true" ]]; then
@@ -166,6 +206,7 @@ jobs:
           ls -la bin/ 2>/dev/null || echo "No libraries found"
 
       - name: Build WFC GDExtension
+        shell: bash
         run: |
           # Setup environment for Web builds
           if [[ "${{ matrix.platform }}" == "web" ]]; then
@@ -185,13 +226,14 @@ jobs:
           ls -la bin/
 
       - name: Verify build output
+        shell: bash
         run: |
           expected="bin/wfc.release.${{ matrix.arch }}.${{ matrix.artifact_ext }}"
           echo "Looking for: $expected"
           
           if [[ -f "$expected" ]]; then
             echo "✅ ${{ matrix.platform }} library found: $expected"
-            echo "File size: $(stat -c%s "$expected") bytes"
+            echo "File size: $(stat -c%s "$expected" 2>/dev/null || stat -f%z "$expected") bytes"
             
             # Additional verification for Windows DLLs
             if [[ "${{ matrix.platform }}" == "windows" ]]; then
