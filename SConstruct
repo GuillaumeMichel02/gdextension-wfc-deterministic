@@ -45,12 +45,23 @@ env.Append(CPPPATH=[
 
 # C++ standard and compiler flags
 if platform == "windows":
-    # MSVC flags
-    env.Append(CXXFLAGS=["/std:c++17"])
-    if target == "template_debug":
-        env.Append(CXXFLAGS=["/Zi", "/Od", "/DDEBUG_ENABLED"])
-    else:  # template_release or release
-        env.Append(CXXFLAGS=["/O2", "/DNDEBUG"])
+    # Check if using MinGW (recommended for CI)
+    use_mingw = ARGUMENTS.get("use_mingw", "no") == "yes"
+    
+    if use_mingw:
+        # MinGW flags (GCC-style)
+        env.Append(CXXFLAGS=["-std=c++17"])
+        if target == "template_debug":
+            env.Append(CXXFLAGS=["-g", "-O0", "-DDEBUG_ENABLED"])
+        else:  # template_release or release
+            env.Append(CXXFLAGS=["-O3", "-DNDEBUG"])
+    else:
+        # MSVC flags
+        env.Append(CXXFLAGS=["/std:c++17"])
+        if target == "template_debug":
+            env.Append(CXXFLAGS=["/Zi", "/Od", "/DDEBUG_ENABLED"])
+        else:  # template_release or release
+            env.Append(CXXFLAGS=["/O2", "/DNDEBUG"])
 else:
     # GCC/Clang flags for Unix platforms
     env.Append(CXXFLAGS=["-std=c++17"])
@@ -61,8 +72,13 @@ else:
 
 # Platform-specific settings
 if platform == "windows":
-    env.Append(CXXFLAGS=["/MD"])
-    env.Append(LINKFLAGS=["/WX:NO"])
+    # Check if using MinGW (recommended for CI)
+    use_mingw = ARGUMENTS.get("use_mingw", "no") == "yes"
+    
+    if not use_mingw:
+        # Only add MSVC-specific flags when NOT using MinGW
+        env.Append(CXXFLAGS=["/MD"])
+        env.Append(LINKFLAGS=["/WX:NO"])
     
     # Architecture detection
     target_arch = ARGUMENTS.get("arch", "x86_64")
@@ -71,7 +87,8 @@ if platform == "windows":
     # Link godot-cpp
     godot_cpp_lib = f"godot-cpp.{platform}.{target}.{target_arch}"
     
-    print(f"Building for Windows {target_arch}")
+    compiler_type = "MinGW" if use_mingw else "MSVC"
+    print(f"Building for Windows {target_arch} with {compiler_type}")
     print(f"Looking for godot-cpp library: {godot_cpp_lib}")
     
     env.Append(LIBPATH=[godot_cpp_lib_path])
