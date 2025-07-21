@@ -61,6 +61,17 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Update SCons
+        run: |
+          echo "Current SCons version:"
+          scons --version || echo "SCons not found"
+          
+          echo "Updating SCons to 4.0+..."
+          pip3 install --upgrade scons
+          
+          echo "New SCons version:"
+          scons --version
+
       - name: Setup godot-cpp
         id: setup-godot-cpp
         run: |
