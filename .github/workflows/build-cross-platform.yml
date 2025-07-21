@@ -10,11 +10,9 @@ env:
   SCONS_CACHE: ${{ github.workspace }}/.scons-cache/
 
 jobs:
-  # All builds using Docker for consistent cross-compilation
+  # Cross-platform builds using modern toolchains
   cross-builds:
     runs-on: ubuntu-latest
-    container: 
-      image: ponders/godot-cpp-ci:3.4.2
     name: ${{ matrix.name }}
     strategy:
       fail-fast: false
@@ -61,16 +59,47 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Update SCons
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: Install SCons
         run: |
-          echo "Current SCons version:"
-          scons --version || echo "SCons not found"
-          
-          echo "Updating SCons to 4.0+..."
-          pip3 install --upgrade scons
-          
-          echo "New SCons version:"
+          pip install scons>=4.0
           scons --version
+
+      - name: Install cross-compilation tools
+        run: |
+          sudo apt-get update
+          case "${{ matrix.platform }}" in
+            "windows")
+              sudo apt-get install -y gcc-mingw-w64 g++-mingw-w64
+              ;;
+            "linux")
+              sudo apt-get install -y build-essential
+              ;;
+            "macos")
+              sudo apt-get install -y clang
+              ;;
+            "web")
+              # Install Emscripten
+              git clone https://github.com/emscripten-core/emsdk.git
+              cd emsdk
+              ./emsdk install latest
+              ./emsdk activate latest
+              source ./emsdk_env.sh
+              cd ..
+              ;;
+          esac
+
+      - name: Setup Emscripten (Web only)
+        if: matrix.platform == 'web'
+        run: |
+          source ./emsdk/emsdk_env.sh
+          echo "EMSDK=$(pwd)/emsdk" >> $GITHUB_ENV
+          echo "$(pwd)/emsdk" >> $GITHUB_PATH
+          echo "$(pwd)/emsdk/upstream/emscripten" >> $GITHUB_PATH
 
       - name: Setup godot-cpp
         id: setup-godot-cpp
@@ -114,6 +143,11 @@ jobs:
       - name: Build godot-cpp
         if: steps.godot-cpp-cache.outputs.cache-hit != 'true'
         run: |
+          # Setup environment for Web builds
+          if [[ "${{ matrix.platform }}" == "web" ]]; then
+            source ./emsdk/emsdk_env.sh
+          fi
+          
           cd godot-cpp
           echo "Building godot-cpp for ${{ matrix.platform }} ${{ matrix.arch }}..."
           scons platform=${{ matrix.platform }} target=${{ matrix.target }} arch=${{ matrix.arch }} -j2 ${{ matrix.flags }}
@@ -133,6 +167,11 @@ jobs:
 
       - name: Build WFC GDExtension
         run: |
+          # Setup environment for Web builds
+          if [[ "${{ matrix.platform }}" == "web" ]]; then
+            source ./emsdk/emsdk_env.sh
+          fi
+          
           mkdir -p bin
           echo "Building WFC GDExtension for ${{ matrix.platform }} ${{ matrix.arch }}..."
           echo "Working directory: $(pwd)"
