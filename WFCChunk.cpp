@@ -10,18 +10,9 @@ using namespace godot;
 
 // This function registers the methods that GDScript can call
 void WFCChunk::_bind_methods() {
-    // ARM64 MSVC workaround for method binding issues
-    #ifdef GODOT_CPP_ARM64_WORKAROUND
-        // Temporarily disable method binding on ARM64 to avoid compilation errors
-        // This is a known issue with godot-cpp member function pointer templates on ARM64
-        // Methods will not be available from GDScript on ARM64 until this is resolved
-        // See: https://github.com/godotengine/godot-cpp/issues (ARM64 Windows MSVC support)
-        #pragma message("Warning: Method binding disabled on ARM64 due to template instantiation issues")
-    #else
-        // Standard method binding for other platforms
-        ClassDB::bind_method(D_METHOD("generate", "seed"), &WFCChunk::generate);
-        ClassDB::bind_method(D_METHOD("get_flat_grid"), &WFCChunk::get_flat_grid);
-    #endif
+    // Bind methods to make them accessible from GDScript
+    ClassDB::bind_method(D_METHOD("generate", "seed"), &WFCChunk::generate);
+    ClassDB::bind_method(D_METHOD("get_flat_grid"), &WFCChunk::get_flat_grid);
 }
 
 // Constructor
