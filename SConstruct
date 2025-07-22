@@ -82,16 +82,6 @@ if platform == "windows":
     else:
         # MSVC flags
         env.Append(CXXFLAGS=["/std:c++17"])
-        # Add ARM64-specific MSVC flags if building for ARM64
-        if ARGUMENTS.get("arch", "x86_64") == "arm64":
-            # Note: /arch:ARM64 is not valid, ARM64 is the default for ARM64 builds
-            env.Append(CPPDEFINES=["_ARM64_"])
-            # Add workaround for ARM64 method binding issues
-            env.Append(CPPDEFINES=[
-                "_ALLOW_ITERATOR_DEBUG_LEVEL_MISMATCH", 
-                "_ALLOW_RUNTIME_LIBRARY_MISMATCH",
-                "GODOT_CPP_ARM64_WORKAROUND"  # Custom define for our workaround
-            ])
         if target == "template_debug":
             env.Append(CXXFLAGS=["/Zi", "/Od", "/DDEBUG_ENABLED"])
         else:  # template_release or release
@@ -115,8 +105,24 @@ if platform == "windows":
         env.Append(LINKFLAGS=["/WX:NO"])
         # Add Windows-specific defines for MSVC
         env.Append(CPPDEFINES=["WIN32", "_WIN32", "NOMINMAX"])
+        
+        # Set target architecture for MSVC
+        target_arch = ARGUMENTS.get("arch", "x86_64")
+        if target_arch == "arm64":
+            # Tell MSVC linker to target ARM64
+            env.Append(LINKFLAGS=["/MACHINE:ARM64"])
+            env.Append(CPPDEFINES=["_ARM64_"])
+            # Add workaround for ARM64 method binding issues
+            env.Append(CPPDEFINES=[
+                "_ALLOW_ITERATOR_DEBUG_LEVEL_MISMATCH", 
+                "_ALLOW_RUNTIME_LIBRARY_MISMATCH",
+                "GODOT_CPP_ARM64_WORKAROUND"  # Custom define for our workaround
+            ])
+        else:
+            # Default to x64 for x86_64
+            env.Append(LINKFLAGS=["/MACHINE:X64"])
     
-    # Architecture detection
+    # Architecture detection (moved here to avoid duplication)
     target_arch = ARGUMENTS.get("arch", "x86_64")
     library_name = f"wfc.{lib_target}.{target_arch}.dll"
     
