@@ -24,42 +24,42 @@ jobs:
             arch: x86_64
             target: template_release
             artifact_ext: dll
-            flags: "use_mingw=yes generate_template_get_node=no"
+            flags: "use_mingw=yes"
           - name: Windows (arm64, MSVC) - Release
             os: windows-latest
             platform: windows
             arch: arm64
             target: template_release
             artifact_ext: dll
-            flags: "generate_template_get_node=no"
+            flags: ""
           - name: Linux (x86_64) - Release
             os: ubuntu-latest
             platform: linux
             arch: x86_64
             target: template_release
             artifact_ext: so
-            flags: "generate_template_get_node=no"
+            flags: ""
           - name: macOS (x86_64) - Release
             os: macos-13
             platform: macos
             arch: x86_64
             target: template_release
             artifact_ext: dylib
-            flags: "generate_template_get_node=no"
+            flags: ""
           - name: macOS (arm64) - Release
             os: macos-latest
             platform: macos
             arch: arm64
             target: template_release
             artifact_ext: dylib
-            flags: "generate_template_get_node=no"
+            flags: ""
           - name: Web (wasm32) - Release
             os: ubuntu-latest
             platform: web
             arch: wasm32
             target: template_release
             artifact_ext: wasm
-            flags: "generate_template_get_node=no"
+            flags: ""
 
     steps:
       - name: Checkout
@@ -205,21 +205,64 @@ jobs:
           cd godot-cpp
           echo "🔨 Building godot-cpp for ${{ matrix.platform }} ${{ matrix.arch }}..."
           
-          # Use optimal build flags for CI
-          BUILD_FLAGS=""
-          if [[ "${{ matrix.target }}" == "template_release" ]]; then
-            BUILD_FLAGS="optimize=speed lto=thin"
+          # Cross-platform CPU count detection
+          if command -v nproc &> /dev/null; then
+            CPU_COUNT=$(nproc)
+          elif command -v sysctl &> /dev/null; then
+            CPU_COUNT=$(sysctl -n hw.ncpu)
           else
-            BUILD_FLAGS="optimize=debug"
+            CPU_COUNT=4
+          fi
+          echo "Using $CPU_COUNT parallel jobs"
+          
+          # Build with platform-appropriate flags
+          case "${{ matrix.platform }}" in
+            "linux")
+              # Linux with GCC - use full LTO instead of thin
+              if [[ "${{ matrix.target }}" == "template_release" ]]; then
+                BUILD_FLAGS="optimize=speed lto=full"
+              else
+                BUILD_FLAGS="optimize=debug"
+              fi
+              ;;
+            "macos")
+              # macOS with Clang - thin LTO is supported
+              if [[ "${{ matrix.target }}" == "template_release" ]]; then
+                BUILD_FLAGS="optimize=speed lto=thin"
+              else
+                BUILD_FLAGS="optimize=debug"
+              fi
+              ;;
+            "windows")
+              # Windows - avoid LTO for compatibility
+              if [[ "${{ matrix.target }}" == "template_release" ]]; then
+                BUILD_FLAGS="optimize=speed"
+              else
+                BUILD_FLAGS="optimize=debug"
+              fi
+              ;;
+            "web")
+              # Web with Emscripten - basic optimization
+              if [[ "${{ matrix.target }}" == "template_release" ]]; then
+                BUILD_FLAGS="optimize=speed"
+              else
+                BUILD_FLAGS="optimize=debug"
+              fi
+              ;;
+          esac
+          
+          # Build godot-cpp with clean flags
+          EXTRA_FLAGS=""
+          if [[ -n "${{ matrix.flags }}" ]]; then
+            EXTRA_FLAGS="${{ matrix.flags }}"
+            echo "Building with extra flags: $EXTRA_FLAGS"
           fi
           
-          # Build with maximum parallelism and optimizations
           scons platform=${{ matrix.platform }} target=${{ matrix.target }} arch=${{ matrix.arch }} \
-            ${BUILD_FLAGS} \
+            $BUILD_FLAGS \
             debug_symbols=no \
-            verbose=no \
-            progress=no \
-            -j$(nproc) ${{ matrix.flags }}
+            -j$CPU_COUNT \
+            $EXTRA_FLAGS
             
           echo "✅ Built godot-cpp libraries:"
           ls -la bin/ || echo "No bin directory yet"
@@ -273,6 +316,15 @@ jobs:
             echo "Using fresh godot-cpp build"
           fi
           
+          # Cross-platform CPU count detection
+          if command -v nproc &> /dev/null; then
+            CPU_COUNT=$(nproc)
+          elif command -v sysctl &> /dev/null; then
+            CPU_COUNT=$(sysctl -n hw.ncpu)
+          else
+            CPU_COUNT=4
+          fi
+          
           # Build with optimal settings for CI
           BUILD_FLAGS=""
           if [[ "${{ matrix.target }}" == "template_release" ]]; then
@@ -281,13 +333,17 @@ jobs:
           
           # Build the extension - this should be fast if godot-cpp is cached
           echo "⏱️ Starting WFC extension build..."
+          EXTRA_FLAGS=""
+          if [[ -n "${{ matrix.flags }}" ]]; then
+            EXTRA_FLAGS="${{ matrix.flags }}"
+            echo "Building with extra flags: $EXTRA_FLAGS"
+          fi
           START_TIME=$(date +%s)
           
           time scons platform=${{ matrix.platform }} target=${{ matrix.target }} arch=${{ matrix.arch }} \
-            ${BUILD_FLAGS} \
-            verbose=no \
-            progress=no \
-            -j$(nproc) ${{ matrix.flags }}
+            $BUILD_FLAGS \
+            -j$CPU_COUNT \
+            $EXTRA_FLAGS
           
           END_TIME=$(date +%s)
           BUILD_DURATION=$((END_TIME - START_TIME))
