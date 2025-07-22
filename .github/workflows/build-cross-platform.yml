@@ -229,16 +229,13 @@ jobs:
             source ./emsdk/emsdk_env.sh
           fi
           
-          mkdir -p bin
           echo "Building WFC GDExtension for ${{ matrix.platform }} ${{ matrix.arch }}..."
           echo "Working directory: $(pwd)"
           echo "godot-cpp status:"
           ls -la godot-cpp/bin/ 2>/dev/null || echo "No godot-cpp libraries found"
           
-          # Build the extension
+          # Build the extension using the simplified SConstruct approach
           scons platform=${{ matrix.platform }} target=${{ matrix.target }} arch=${{ matrix.arch }} \
-            optimize=speed \
-            debug_symbols=no \
             -j4 ${{ matrix.flags }}
           
           echo "Build complete. Generated files:"
@@ -247,7 +244,22 @@ jobs:
       - name: Verify build output
         shell: bash
         run: |
-          expected="bin/wfc.release.${{ matrix.arch }}.${{ matrix.artifact_ext }}"
+          # The new SConstruct creates platform-specific directories with godot-cpp naming convention
+          platform_dir="bin/${{ matrix.platform }}"
+          
+          # Determine the expected filename based on platform
+          case "${{ matrix.platform }}" in
+            "windows")
+              expected="$platform_dir/wfc.${{ matrix.platform }}.${{ matrix.target }}.${{ matrix.arch }}.dll"
+              ;;
+            "macos"|"linux")
+              expected="$platform_dir/libwfc.${{ matrix.platform }}.${{ matrix.target }}.${{ matrix.arch }}.${{ matrix.artifact_ext }}"
+              ;;
+            "web")
+              expected="$platform_dir/wfc.${{ matrix.platform }}.${{ matrix.target }}.${{ matrix.arch }}.wasm"
+              ;;
+          esac
+          
           echo "Looking for: $expected"
           
           if [[ -f "$expected" ]]; then
@@ -261,12 +273,10 @@ jobs:
             fi
           else
             echo "❌ ${{ matrix.platform }} library not found: $expected"
-            echo "Available files in bin/:"
-            find bin/ -name "*.${{ matrix.artifact_ext }}" 2>/dev/null || echo "No .${{ matrix.artifact_ext }} files found"
+            echo "Available files in platform directory:"
+            ls -la "$platform_dir/" 2>/dev/null || echo "Platform directory not found"
             echo "All files in bin/:"
-            ls -la bin/ 2>/dev/null || echo "bin directory not found"
-            echo "Current directory contents:"
-            ls -la
+            find bin/ -type f 2>/dev/null || echo "bin directory not found"
             exit 1
           fi
 
@@ -274,7 +284,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: wfc-${{ matrix.platform }}-${{ matrix.arch }}
-          path: bin/*.${{ matrix.artifact_ext }}
+          path: bin/${{ matrix.platform }}/*
           if-no-files-found: error
 
   # Collect all artifacts and create a release-ready package
