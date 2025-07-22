@@ -120,8 +120,13 @@ if platform == "windows":
     target_arch = ARGUMENTS.get("arch", "x86_64")
     library_name = f"wfc.{lib_target}.{target_arch}.dll"
     
-    # Link godot-cpp
-    godot_cpp_lib = f"godot-cpp.{platform}.{target}.{target_arch}"
+    # Link godot-cpp - handle different naming conventions for MinGW vs MSVC
+    if use_mingw:
+        # MinGW uses .a files
+        godot_cpp_lib = f"godot-cpp.{platform}.{target}.{target_arch}"
+    else:
+        # MSVC uses lib prefix and .lib extension
+        godot_cpp_lib = f"libgodot-cpp.{platform}.{target}.{target_arch}.lib"
     
     compiler_type = "MinGW" if use_mingw else "MSVC"
     print(f"Building for Windows {target_arch} with {compiler_type}")
