@@ -169,32 +169,40 @@ jobs:
           echo "hash=${hash}" >> $GITHUB_OUTPUT
           echo "Godot-cpp commit: ${hash}"
 
-      - name: Cache SCons database
-        uses: actions/cache@v4
-        with:
-          path: |
-            .sconsign.dblite
-            **/*.os
-          key: scons-db-${{ matrix.platform }}-${{ matrix.arch }}-${{ matrix.target }}-${{ github.sha }}
-          restore-keys: |
-            scons-db-${{ matrix.platform }}-${{ matrix.arch }}-${{ matrix.target }}-
-            scons-db-${{ matrix.platform }}-${{ matrix.arch }}-
-
-      - name: Cache godot-cpp build  
+      - name: Cache SCons and godot-cpp build
         uses: actions/cache@v4
         id: godot-cpp-cache
         with:
           path: |
+            .sconsign.dblite
             godot-cpp/bin
             godot-cpp/gen
             godot-cpp/.sconsign.dblite
-          key: godot-cpp-${{ matrix.platform }}-${{ matrix.arch }}-${{ matrix.target }}-${{ steps.setup-godot-cpp.outputs.hash }}-v2
+            **/*.os
+          key: unified-build-${{ matrix.platform }}-${{ matrix.arch }}-${{ matrix.target }}-${{ steps.setup-godot-cpp.outputs.hash }}-v3
           restore-keys: |
-            godot-cpp-${{ matrix.platform }}-${{ matrix.arch }}-${{ matrix.target }}-
-            godot-cpp-${{ matrix.platform }}-${{ matrix.arch }}-
+            unified-build-${{ matrix.platform }}-${{ matrix.arch }}-${{ matrix.target }}-
+            unified-build-${{ matrix.platform }}-${{ matrix.arch }}-
 
-      - name: Build godot-cpp
-        if: steps.godot-cpp-cache.outputs.cache-hit != 'true'
+      - name: Show build cache status
+        shell: bash
+        run: |
+          if [[ "${{ steps.godot-cpp-cache.outputs.cache-hit }}" == "true" ]]; then
+            echo "✅ Using cached build artifacts for ${{ matrix.platform }} ${{ matrix.arch }}"
+            echo "Cache hit - build will be much faster!"
+            echo "Available cached godot-cpp libraries:"
+            ls -la godot-cpp/bin/ 2>/dev/null || echo "No cached godot-cpp libraries found"
+            echo "Available cached headers:"
+            ls -la godot-cpp/gen/include/godot_cpp/classes/ 2>/dev/null | head -3 || echo "No cached headers found"
+            echo "SCons database status:"
+            ls -la .sconsign.dblite 2>/dev/null && echo "Main SCons database cached" || echo "No main SCons database cache"
+            ls -la godot-cpp/.sconsign.dblite 2>/dev/null && echo "godot-cpp SCons database cached" || echo "No godot-cpp SCons database cache"
+          else
+            echo "🔨 No cache found - full build will be performed"
+            echo "Future builds will use cache for faster compilation"
+          fi
+
+      - name: Build WFC GDExtension (with godot-cpp)
         shell: bash
         run: |
           # Setup environment for Web builds
@@ -202,8 +210,15 @@ jobs:
             source ./emsdk/emsdk_env.sh
           fi
           
-          cd godot-cpp
-          echo "🔨 Building godot-cpp for ${{ matrix.platform }} ${{ matrix.arch }}..."
+          echo "🚀 Building WFC GDExtension (with godot-cpp if needed) for ${{ matrix.platform }} ${{ matrix.arch }}..."
+          echo "Working directory: $(pwd)"
+          
+          # Show cache status
+          if [[ "${{ steps.godot-cpp-cache.outputs.cache-hit }}" == "true" ]]; then
+            echo "✅ Using cached build artifacts - incremental build mode"
+          else
+            echo "🔨 Building from scratch - full build mode"
+          fi
           
           # Cross-platform CPU count detection
           if command -v nproc &> /dev/null; then
@@ -215,7 +230,7 @@ jobs:
           fi
           echo "Using $CPU_COUNT parallel jobs"
           
-          # Build with platform-appropriate flags
+          # Build with platform-appropriate optimization flags
           case "${{ matrix.platform }}" in
             "linux")
               # Linux with GCC - use full LTO instead of thin
@@ -251,115 +266,44 @@ jobs:
               ;;
           esac
           
-          # Build godot-cpp with clean flags
+          # Prepare extra flags
           EXTRA_FLAGS=""
           if [[ -n "${{ matrix.flags }}" ]]; then
             EXTRA_FLAGS="${{ matrix.flags }}"
-            echo "Building with extra flags: $EXTRA_FLAGS"
+            echo "Using extra flags: $EXTRA_FLAGS"
           fi
           
-          scons platform=${{ matrix.platform }} target=${{ matrix.target }} arch=${{ matrix.arch }} \
-            $BUILD_FLAGS \
-            debug_symbols=no \
-            -j$CPU_COUNT \
-            $EXTRA_FLAGS
-            
-          echo "✅ Built godot-cpp libraries:"
-          ls -la bin/ || echo "No bin directory yet"
-
-      - name: Show godot-cpp cache status and verify headers
-        shell: bash
-        run: |
-          cd godot-cpp
-          if [[ "${{ steps.godot-cpp-cache.outputs.cache-hit }}" == "true" ]]; then
-            echo "✅ Using cached godot-cpp libraries for ${{ matrix.platform }} ${{ matrix.arch }}"
-            echo "Cache hit - build will be much faster!"
-          else
-            echo "🔨 Built fresh godot-cpp libraries for ${{ matrix.platform }} ${{ matrix.arch }}"
-            echo "First build - future builds will use cache"
-          fi
-          echo "Available libraries:"
-          ls -la bin/ 2>/dev/null || echo "No libraries found"
-          echo "Generated headers (sample):"
-          ls -la gen/include/godot_cpp/classes/ 2>/dev/null | head -5 || echo "No generated class headers found"
-          
-          # Verify essential headers exist
-          MISSING_HEADERS=()
-          for header in "ref_counted.hpp" "object.hpp" "node.hpp"; do
-            if [[ ! -f "gen/include/godot_cpp/classes/${header}" ]]; then
-              MISSING_HEADERS+=("${header}")
-            fi
-          done
-          
-          if [[ ${#MISSING_HEADERS[@]} -eq 0 ]]; then
-            echo "✅ All essential headers found"
-          else
-            echo "❌ Missing headers: ${MISSING_HEADERS[*]}"
-            echo "This may indicate an incomplete build"
-          fi
-
-      - name: Build WFC GDExtension
-        shell: bash
-        run: |
-          # Setup environment for Web builds
-          if [[ "${{ matrix.platform }}" == "web" ]]; then
-            source ./emsdk/emsdk_env.sh
-          fi
-          
-          echo "🚀 Building WFC GDExtension for ${{ matrix.platform }} ${{ matrix.arch }}..."
-          echo "Working directory: $(pwd)"
-          
-          # Show godot-cpp status
-          if [[ "${{ steps.godot-cpp-cache.outputs.cache-hit }}" == "true" ]]; then
-            echo "Using cached godot-cpp - build should be fast"
-          else
-            echo "Using fresh godot-cpp build"
-          fi
-          
-          # Cross-platform CPU count detection
-          if command -v nproc &> /dev/null; then
-            CPU_COUNT=$(nproc)
-          elif command -v sysctl &> /dev/null; then
-            CPU_COUNT=$(sysctl -n hw.ncpu)
-          else
-            CPU_COUNT=4
-          fi
-          
-          # Build with optimal settings for CI
-          BUILD_FLAGS=""
-          if [[ "${{ matrix.target }}" == "template_release" ]]; then
-            BUILD_FLAGS="optimize=speed"
-          fi
-          
-          # Build the extension - this should be fast if godot-cpp is cached
-          echo "⏱️ Starting WFC extension build..."
-          EXTRA_FLAGS=""
-          if [[ -n "${{ matrix.flags }}" ]]; then
-            EXTRA_FLAGS="${{ matrix.flags }}"
-            echo "Building with extra flags: $EXTRA_FLAGS"
-          fi
+          # Build both godot-cpp (if needed) and WFC extension in one SCons invocation
+          echo "⏱️ Starting unified build..."
           START_TIME=$(date +%s)
           
           time scons platform=${{ matrix.platform }} target=${{ matrix.target }} arch=${{ matrix.arch }} \
             $BUILD_FLAGS \
+            debug_symbols=no \
             -j$CPU_COUNT \
             $EXTRA_FLAGS
           
           END_TIME=$(date +%s)
           BUILD_DURATION=$((END_TIME - START_TIME))
           
-          echo "✅ WFC Extension build complete in ${BUILD_DURATION} seconds"
+          echo "✅ Build complete in ${BUILD_DURATION} seconds"
           
-          # Report cache effectiveness
+          # Report build effectiveness
           if [[ "${{ steps.godot-cpp-cache.outputs.cache-hit }}" == "true" ]]; then
-            echo "🚀 Fast build achieved using cached godot-cpp!"
+            echo "🚀 Fast incremental build achieved using unified caching!"
+            echo "SCons reused cached godot-cpp artifacts and built only what changed"
             echo "Cache saved approximately 3-5 minutes of build time"
           else
-            echo "🔨 Full build completed - future builds will be faster with cache"
+            echo "🔨 Full build completed (godot-cpp + WFC extension)"
+            echo "Future builds will be much faster with unified cache"
           fi
           
           echo "📁 Generated files:"
           ls -la bin/
+          
+          # Verify godot-cpp was handled correctly
+          echo "📋 godot-cpp status:"
+          ls -la godot-cpp/bin/ 2>/dev/null || echo "No godot-cpp libraries found"
 
       - name: Verify build output
         shell: bash
@@ -380,7 +324,7 @@ jobs:
               expected="$platform_dir/libwfc.${{ matrix.platform }}.${{ matrix.target }}.${{ matrix.arch }}.${{ matrix.artifact_ext }}"
               ;;
             "web")
-              expected="$platform_dir/wfc.${{ matrix.platform }}.${{ matrix.target }}.${{ matrix.arch }}.wasm"
+              expected="$platform_dir/libwfc.${{ matrix.platform }}.${{ matrix.target }}.${{ matrix.arch }}.wasm"
               ;;
           esac
           
