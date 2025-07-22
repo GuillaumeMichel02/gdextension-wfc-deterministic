@@ -8,4 +8,4 @@ macos.template_release.x86_64 = "bin/macos/libwfc.macos.template_release.x86_64.
 windows.template_release.x86_64 = "bin/windows/libwfc.windows.template_release.x86_64.dll"
 windows.template_release.arm64 = "bin/windows/libwfc.windows.template_release.arm64.dll"
 linux.template_release.x86_64 = "bin/linux/libwfc.linux.template_release.x86_64.so"
-web.template_release.wasm32 = "bin/web/libwfc.web.template_release.wasm32.wasm"
+web.template_release.wasm32 = "bin/web/wfc.web.template_release.wasm32.wasm"
