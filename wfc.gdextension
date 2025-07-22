@@ -1,6 +1,6 @@
 [configuration]
 entry_symbol = "wfc_library_init"
-compatibility_minimum = "4.3"
+compatibility_minimum = "4.4"
 
 [libraries]
 macos.arm64 = "bin/macos/libwfc.macos.template_release.arm64.dylib"

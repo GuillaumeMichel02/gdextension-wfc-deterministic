@@ -95,3 +95,17 @@ for src in required_sources:
         print("Warning: Required source file '{}' not found".format(src))
     else:
         print("Found: {}".format(src))
+
+# Optional: Copy plugin.cfg for local testing
+def copy_plugin_config(target, source, env):
+    """Copy plugin.cfg to bin directory for easy local testing"""
+    import shutil
+    try:
+        shutil.copy2("plugin.cfg", "bin/plugin.cfg")
+        print("✓ Copied plugin.cfg to bin/ directory")
+    except Exception as e:
+        print(f"Note: Could not copy plugin.cfg: {e}")
+
+# Add plugin.cfg copy action
+if os.path.exists("plugin.cfg"):
+    env.AddPostAction(library, copy_plugin_config)

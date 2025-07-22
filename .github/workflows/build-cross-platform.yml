@@ -372,24 +372,25 @@ jobs:
 
       - name: Package release
         run: |
-          mkdir -p release/bin
+          mkdir -p wfc/bin
           
-          # Copy all built libraries to release directory
-          find artifacts/ -name "*.dll" -exec cp {} release/bin/ \;
-          find artifacts/ -name "*.so" -exec cp {} release/bin/ \;
-          find artifacts/ -name "*.dylib" -exec cp {} release/bin/ \;
-          find artifacts/ -name "*.wasm" -exec cp {} release/bin/ \;
+          # Copy all built libraries to wfc directory
+          find artifacts/ -name "*.dll" -exec cp {} wfc/bin/ \;
+          find artifacts/ -name "*.so" -exec cp {} wfc/bin/ \;
+          find artifacts/ -name "*.dylib" -exec cp {} wfc/bin/ \;
+          find artifacts/ -name "*.wasm" -exec cp {} wfc/bin/ \;
           
-          # Copy extension configuration and other files
-          cp wfc.gdextension release/
-          cp README.md release/ 2>/dev/null || echo "README.md not found"
-          cp LICENSE release/ 2>/dev/null || echo "LICENSE not found"
+          # Copy extension configuration and metadata files
+          cp wfc.gdextension wfc/
+          cp plugin.cfg wfc/
+          cp README.md wfc/ 2>/dev/null || echo "README.md not found"
+          cp LICENSE wfc/ 2>/dev/null || echo "LICENSE not found"
           
           echo "Release package contents:"
-          find release/ -type f | sort
+          find wfc/ -type f | sort
           
           # Create archive
-          tar -czf wfc-gdextension-cross-platform.tar.gz -C release .
+          tar -czf wfc-gdextension-cross-platform.tar.gz wfc/
           
           echo "📦 Release package created: wfc-gdextension-cross-platform.tar.gz"
           echo "Package size: $(stat -c%s wfc-gdextension-cross-platform.tar.gz) bytes"
@@ -400,7 +401,7 @@ jobs:
           name: wfc-gdextension-release
           path: |
             wfc-gdextension-cross-platform.tar.gz
-            release/
+            wfc/
           if-no-files-found: error
 
       - name: Display build summary
