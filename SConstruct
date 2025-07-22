@@ -84,9 +84,14 @@ if platform == "windows":
         env.Append(CXXFLAGS=["/std:c++17"])
         # Add ARM64-specific MSVC flags if building for ARM64
         if ARGUMENTS.get("arch", "x86_64") == "arm64":
-            env.Append(CXXFLAGS=["/arch:ARM64", "/D_ARM64_"])
+            # Note: /arch:ARM64 is not valid, ARM64 is the default for ARM64 builds
+            env.Append(CPPDEFINES=["_ARM64_"])
             # Add workaround for ARM64 method binding issues
-            env.Append(CXXFLAGS=["/D_ALLOW_ITERATOR_DEBUG_LEVEL_MISMATCH", "/D_ALLOW_RUNTIME_LIBRARY_MISMATCH"])
+            env.Append(CPPDEFINES=[
+                "_ALLOW_ITERATOR_DEBUG_LEVEL_MISMATCH", 
+                "_ALLOW_RUNTIME_LIBRARY_MISMATCH",
+                "GODOT_CPP_ARM64_WORKAROUND"  # Custom define for our workaround
+            ])
         if target == "template_debug":
             env.Append(CXXFLAGS=["/Zi", "/Od", "/DDEBUG_ENABLED"])
         else:  # template_release or release
