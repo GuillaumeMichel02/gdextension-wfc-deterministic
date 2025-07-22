@@ -1,7 +1,10 @@
 import os
 import sys
+from SCons.Script import *
+from SCons.Node.FS import File
 
 # Get build parameters
+arch = ARGUMENTS.get("arch", "")
 platform = ARGUMENTS.get("platform", "")
 target = ARGUMENTS.get("target", "template_release")
 
@@ -14,8 +17,19 @@ if platform == "":
     else:
         platform = "linux"
 
+# Auto-detect architecture if not specified
+if arch == "":
+    import platform as platform_module
+    if platform == "windows":
+        arch = "x86_64"  # Default for Windows
+    elif platform == "macos":
+        arch = "arm64" if platform_module.machine() == "arm64" else "x86_64"
+    else:
+        arch = "x86_64"  # Default for Linux
+
 print(f"=== Build Configuration ===")
 print(f"Platform: {platform}")
+print(f"Architecture: {arch}")
 print(f"Target: {target}")
 print(f"Arguments: {dict(ARGUMENTS)}")
 
@@ -29,8 +43,8 @@ else:
 
 print(f"Mapped lib_target: {lib_target}")
 
-# Setup environment
-env = Environment()
+# Setup environment - use default tools
+env = Environment(tools=["default"])
 
 # Godot-cpp path
 godot_cpp_path = "godot-cpp"
@@ -43,99 +57,116 @@ env.Append(CPPPATH=[
     os.path.join(godot_cpp_path, "gdextension")
 ])
 
-# C++ standard and compiler flags
-if platform == "windows":
-    # Check if using MinGW (recommended for CI)
-    use_mingw = ARGUMENTS.get("use_mingw", "no") == "yes"
-    
-    if use_mingw:
-        # MinGW flags (GCC-style)
-        env.Append(CXXFLAGS=["-std=c++17"])
-        # Add Windows-specific defines for MinGW
-        env.Append(CPPDEFINES=[
-            "WIN32", "_WIN32", "__MINGW32__", "NOMINMAX",
-            # Fix MinGW DLL export issues
-            "__DECLSPEC_SUPPORTED",  # Enable __declspec support in MinGW
-            "_WINDLL"                # Define Windows DLL context
-        ])
-        # Fix MinGW linker issues: multiple definitions, missing math/thread functions, missing operator new/delete
-        env.Append(LINKFLAGS=[
-            "-static-libgcc", 
-            "-static-libstdc++",
-            "-Wl,--allow-multiple-definition",  # Allow multiple definitions
-            "-lm",  # Link math library for math functions
-            "-lpthread",  # Link pthread for threading functions
-            "-lmingw32",  # MinGW runtime
-            "-lgcc_s",  # GCC support library
-            "-lmoldname",  # C runtime functions
-            "-lmsvcrt"  # Microsoft C runtime for printf functions
-        ])
-        # Add compiler flags to reduce symbol conflicts
-        env.Append(CXXFLAGS=[
-            "-fvisibility=hidden",  # Hide symbols by default
-            "-fvisibility-inlines-hidden"  # Hide inline symbols
-        ])
-        if target == "template_debug":
-            env.Append(CXXFLAGS=["-g", "-O0", "-DDEBUG_ENABLED"])
-        else:  # template_release or release
-            env.Append(CXXFLAGS=["-O3", "-DNDEBUG"])
-    else:
-        # MSVC flags
-        env.Append(CXXFLAGS=["/std:c++17"])
-        if target == "template_debug":
-            env.Append(CXXFLAGS=["/Zi", "/Od", "/DDEBUG_ENABLED"])
-        else:  # template_release or release
-            env.Append(CXXFLAGS=["/O2", "/DNDEBUG"])
-else:
-    # GCC/Clang flags for Unix platforms
-    env.Append(CXXFLAGS=["-std=c++17"])
-    if target == "template_debug":
-        env.Append(CXXFLAGS=["-g", "-O0", "-DDEBUG_ENABLED", "-fno-omit-frame-pointer"])
-    else:  # template_release or release
-        env.Append(CXXFLAGS=["-O3", "-DNDEBUG", "-fomit-frame-pointer"])
+# Common C++ standard and defines
+env.Append(CXXFLAGS=["-std=c++17" if platform != "windows" or ARGUMENTS.get("use_mingw", "no") == "yes" else "/std:c++17"])
+env.Append(CPPDEFINES=["GDEXTENSION"])
 
-# Platform-specific settings
+# Platform-specific configuration following godot-cpp patterns
 if platform == "windows":
-    # Check if using MinGW (recommended for CI)
     use_mingw = ARGUMENTS.get("use_mingw", "no") == "yes"
     
-    if not use_mingw:
-        # Only add MSVC-specific flags when NOT using MinGW
-        env.Append(CXXFLAGS=["/MD"])
-        env.Append(LINKFLAGS=["/WX:NO"])
-        # Add Windows-specific defines for MSVC
-        env.Append(CPPDEFINES=["WIN32", "_WIN32", "NOMINMAX"])
-        
-        # Set target architecture for MSVC
-        target_arch = ARGUMENTS.get("arch", "x86_64")
-        if target_arch == "arm64":
-            # Tell MSVC linker to target ARM64
-            env.Append(LINKFLAGS=["/MACHINE:ARM64"])
-            env.Append(CPPDEFINES=["_ARM64_"])
-            # Add workaround for ARM64 method binding issues
-            env.Append(CPPDEFINES=[
-                "_ALLOW_ITERATOR_DEBUG_LEVEL_MISMATCH", 
-                "_ALLOW_RUNTIME_LIBRARY_MISMATCH",
-                "GODOT_CPP_ARM64_WORKAROUND"  # Custom define for our workaround
-            ])
-        else:
-            # Default to x64 for x86_64
-            env.Append(LINKFLAGS=["/MACHINE:X64"])
-    
-    # Architecture detection (moved here to avoid duplication)
-    target_arch = ARGUMENTS.get("arch", "x86_64")
+    # Set target architecture
+    target_arch = arch
     library_name = f"wfc.{lib_target}.{target_arch}.dll"
     
-    # Link godot-cpp - handle different naming conventions for MinGW vs MSVC
     if use_mingw:
-        # MinGW uses .a files
+        print(f"Configuring MinGW build for {target_arch}")
+        
+        # MinGW defines and flags (following godot-cpp windows.py pattern)
+        env.Append(CPPDEFINES=["WINDOWS_ENABLED", "__MINGW32__", "NOMINMAX"])
+        env.Append(CCFLAGS=["-Wwrite-strings"])
+        
+        # Cross-compilation setup for MinGW
+        if target_arch == "arm64":
+            prefix = "aarch64-w64-mingw32"
+        elif target_arch == "x86_64":
+            prefix = "x86_64-w64-mingw32"
+        elif target_arch == "x86_32":
+            prefix = "i686-w64-mingw32"
+        else:
+            prefix = "x86_64-w64-mingw32"  # fallback
+        
+        # Set MinGW tools if cross-compiling
+        mingw_prefix = ARGUMENTS.get("mingw_prefix", "")
+        if mingw_prefix:
+            tool_prefix = f"{mingw_prefix}/bin/{prefix}"
+            env["CXX"] = f"{tool_prefix}-g++"
+            env["CC"] = f"{tool_prefix}-gcc"
+            env["AR"] = f"{tool_prefix}-gcc-ar"
+            env["RANLIB"] = f"{tool_prefix}-ranlib"
+            env["LINK"] = f"{tool_prefix}-g++"
+        
+        # MinGW linking flags
+        env.Append(LINKFLAGS=["-Wl,--no-undefined"])
+        if ARGUMENTS.get("use_static_cpp", "yes") == "yes":
+            env.Append(LINKFLAGS=["-static", "-static-libgcc", "-static-libstdc++"])
+        
+        # Set library prefixes/suffixes
+        env["SHLIBPREFIX"] = ""
+        env["SHLIBSUFFIX"] = ".dll"
+        
+        # Optimization flags
+        if target == "template_debug":
+            env.Append(CCFLAGS=["-g", "-O0"])
+            env.Append(CPPDEFINES=["DEBUG_ENABLED"])
+        else:
+            env.Append(CCFLAGS=["-O3"])
+            env.Append(CPPDEFINES=["NDEBUG"])
+        
+        # Link godot-cpp (MinGW uses .a files)
         godot_cpp_lib = f"godot-cpp.{platform}.{target}.{target_arch}"
+    
     else:
-        # MSVC uses lib prefix and .lib extension
+        print(f"Configuring MSVC build for {target_arch}")
+        
+        # MSVC setup (following godot-cpp windows.py pattern)
+        if target_arch == "x86_64":
+            env["TARGET_ARCH"] = "amd64"
+        elif target_arch == "arm64":
+            env["TARGET_ARCH"] = "arm64"
+        elif target_arch == "arm32":
+            env["TARGET_ARCH"] = "arm"
+        elif target_arch == "x86_32":
+            env["TARGET_ARCH"] = "x86"
+        
+        env["is_msvc"] = True
+        
+        # MSVC defines and flags
+        env.Append(CPPDEFINES=["TYPED_METHOD_BIND", "NOMINMAX", "WINDOWS_ENABLED"])
+        env.Append(CCFLAGS=["/utf-8"])
+        
+        # Runtime library flags
+        if ARGUMENTS.get("use_static_cpp", "yes") == "yes":
+            env.Append(CCFLAGS=["/MT" if target == "template_release" else "/MTd"])
+        else:
+            env.Append(CCFLAGS=["/MD" if target == "template_release" else "/MDd"])
+        
+        # Linker flags
+        env.Append(LINKFLAGS=["/WX:NO"])  # Don't treat warnings as errors
+        
+        # Set target machine for linker
+        if target_arch == "arm64":
+            env.Append(LINKFLAGS=["/MACHINE:ARM64"])
+        else:
+            env.Append(LINKFLAGS=["/MACHINE:X64"])
+        
+        # Optimization flags
+        if target == "template_debug":
+            env.Append(CCFLAGS=["/Zi", "/Od"])
+            env.Append(LINKFLAGS=["/DEBUG"])
+            env.Append(CPPDEFINES=["DEBUG_ENABLED"])
+        else:
+            env.Append(CCFLAGS=["/O2"])
+            env.Append(CPPDEFINES=["NDEBUG"])
+        
+        # Set library prefixes/suffixes for MSVC
+        env["SHLIBPREFIX"] = ""
+        env["SHLIBSUFFIX"] = ".dll"
+        
+        # Link godot-cpp (MSVC needs lib prefix and .lib extension)
         godot_cpp_lib = f"libgodot-cpp.{platform}.{target}.{target_arch}.lib"
     
-    compiler_type = "MinGW" if use_mingw else "MSVC"
-    print(f"Building for Windows {target_arch} with {compiler_type}")
+    print(f"Building for Windows {target_arch} with {'MinGW' if use_mingw else 'MSVC'}")
     print(f"Looking for godot-cpp library: {godot_cpp_lib}")
     
     env.Append(LIBPATH=[godot_cpp_lib_path])
@@ -258,4 +289,4 @@ print(f"Platform: {platform}, Architecture: {target_arch}")
 print(f"Target: {target} -> {lib_target}")
 
 # Set default target
-Default(library)
+env.Default(library)
