@@ -348,6 +348,30 @@ jobs:
             exit 1
           fi
 
+      - name: Sign macOS libraries
+        if: matrix.platform == 'macos'
+        shell: bash
+        run: |
+          echo "🔏 Signing macOS libraries for ${{ matrix.arch }}..."
+          platform_dir="bin/${{ matrix.platform }}"
+          
+          # Find and sign all .dylib files
+          for dylib in "$platform_dir"/*.dylib; do
+            if [[ -f "$dylib" ]]; then
+              echo "Signing: $dylib"
+              codesign --force --deep --sign - "$dylib"
+              
+              # Verify signing
+              if codesign --verify --verbose "$dylib" 2>/dev/null; then
+                echo "✅ Successfully signed: $(basename "$dylib")"
+              else
+                echo "⚠️  Warning: Could not verify signature for $(basename "$dylib")"
+              fi
+            fi
+          done
+          
+          echo "🔏 macOS library signing complete!"
+
       - name: Upload built library
         uses: actions/upload-artifact@v4
         with:
