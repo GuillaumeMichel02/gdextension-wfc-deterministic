@@ -250,13 +250,13 @@ jobs:
           # Determine the expected filename based on platform
           case "${{ matrix.platform }}" in
             "windows")
-              expected="$platform_dir/wfc.${{ matrix.platform }}.${{ matrix.target }}.${{ matrix.arch }}.dll"
+              expected="$platform_dir/libwfc.${{ matrix.platform }}.${{ matrix.target }}.${{ matrix.arch }}.dll"
               ;;
             "macos"|"linux")
               expected="$platform_dir/libwfc.${{ matrix.platform }}.${{ matrix.target }}.${{ matrix.arch }}.${{ matrix.artifact_ext }}"
               ;;
             "web")
-              expected="$platform_dir/wfc.${{ matrix.platform }}.${{ matrix.target }}.${{ matrix.arch }}.wasm"
+              expected="$platform_dir/libwfc.${{ matrix.platform }}.${{ matrix.target }}.${{ matrix.arch }}.wasm"
               ;;
           esac
           
