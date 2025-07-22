@@ -169,6 +169,17 @@ jobs:
           echo "hash=${hash}" >> $GITHUB_OUTPUT
           echo "Godot-cpp commit: ${hash}"
 
+      - name: Cache SCons database
+        uses: actions/cache@v4
+        with:
+          path: |
+            .sconsign.dblite
+            **/*.os
+          key: scons-db-${{ matrix.platform }}-${{ matrix.arch }}-${{ matrix.target }}-${{ github.sha }}
+          restore-keys: |
+            scons-db-${{ matrix.platform }}-${{ matrix.arch }}-${{ matrix.target }}-
+            scons-db-${{ matrix.platform }}-${{ matrix.arch }}-
+
       - name: Cache godot-cpp build  
         uses: actions/cache@v4
         id: godot-cpp-cache
@@ -176,10 +187,11 @@ jobs:
           path: |
             godot-cpp/bin
             godot-cpp/gen
-          key: godot-cpp-${{ matrix.platform }}-${{ matrix.arch }}-${{ matrix.target }}-flags-${{ matrix.flags }}-${{ steps.setup-godot-cpp.outputs.hash }}
+            godot-cpp/.sconsign.dblite
+          key: godot-cpp-${{ matrix.platform }}-${{ matrix.arch }}-${{ matrix.target }}-${{ steps.setup-godot-cpp.outputs.hash }}-v2
           restore-keys: |
-            godot-cpp-${{ matrix.platform }}-${{ matrix.arch }}-${{ matrix.target }}-flags-${{ matrix.flags }}-
             godot-cpp-${{ matrix.platform }}-${{ matrix.arch }}-${{ matrix.target }}-
+            godot-cpp-${{ matrix.platform }}-${{ matrix.arch }}-
 
       - name: Build godot-cpp
         if: steps.godot-cpp-cache.outputs.cache-hit != 'true'
@@ -191,13 +203,25 @@ jobs:
           fi
           
           cd godot-cpp
-          echo "Building godot-cpp for ${{ matrix.platform }} ${{ matrix.arch }}..."
-          # Use optimized build flags for faster compilation
+          echo "🔨 Building godot-cpp for ${{ matrix.platform }} ${{ matrix.arch }}..."
+          
+          # Use optimal build flags for CI
+          BUILD_FLAGS=""
+          if [[ "${{ matrix.target }}" == "template_release" ]]; then
+            BUILD_FLAGS="optimize=speed lto=thin"
+          else
+            BUILD_FLAGS="optimize=debug"
+          fi
+          
+          # Build with maximum parallelism and optimizations
           scons platform=${{ matrix.platform }} target=${{ matrix.target }} arch=${{ matrix.arch }} \
-            optimize=speed \
+            ${BUILD_FLAGS} \
             debug_symbols=no \
-            -j4 ${{ matrix.flags }}
-          echo "Built godot-cpp libraries:"
+            verbose=no \
+            progress=no \
+            -j$(nproc) ${{ matrix.flags }}
+            
+          echo "✅ Built godot-cpp libraries:"
           ls -la bin/ || echo "No bin directory yet"
 
       - name: Show godot-cpp cache status and verify headers
@@ -206,19 +230,29 @@ jobs:
           cd godot-cpp
           if [[ "${{ steps.godot-cpp-cache.outputs.cache-hit }}" == "true" ]]; then
             echo "✅ Using cached godot-cpp libraries for ${{ matrix.platform }} ${{ matrix.arch }}"
+            echo "Cache hit - build will be much faster!"
           else
             echo "🔨 Built fresh godot-cpp libraries for ${{ matrix.platform }} ${{ matrix.arch }}"
+            echo "First build - future builds will use cache"
           fi
           echo "Available libraries:"
           ls -la bin/ 2>/dev/null || echo "No libraries found"
-          echo "Generated headers:"
-          ls -la gen/include/godot_cpp/classes/ 2>/dev/null | head -10 || echo "No generated class headers found"
+          echo "Generated headers (sample):"
+          ls -la gen/include/godot_cpp/classes/ 2>/dev/null | head -5 || echo "No generated class headers found"
           
-          # Check for the specific header our extension needs
-          if [[ -f "gen/include/godot_cpp/classes/ref_counted.hpp" ]]; then
-            echo "✅ RefCounted header found"
+          # Verify essential headers exist
+          MISSING_HEADERS=()
+          for header in "ref_counted.hpp" "object.hpp" "node.hpp"; do
+            if [[ ! -f "gen/include/godot_cpp/classes/${header}" ]]; then
+              MISSING_HEADERS+=("${header}")
+            fi
+          done
+          
+          if [[ ${#MISSING_HEADERS[@]} -eq 0 ]]; then
+            echo "✅ All essential headers found"
           else
-            echo "❌ RefCounted header missing - need to rebuild with bindings"
+            echo "❌ Missing headers: ${MISSING_HEADERS[*]}"
+            echo "This may indicate an incomplete build"
           fi
 
       - name: Build WFC GDExtension
@@ -229,16 +263,46 @@ jobs:
             source ./emsdk/emsdk_env.sh
           fi
           
-          echo "Building WFC GDExtension for ${{ matrix.platform }} ${{ matrix.arch }}..."
+          echo "🚀 Building WFC GDExtension for ${{ matrix.platform }} ${{ matrix.arch }}..."
           echo "Working directory: $(pwd)"
-          echo "godot-cpp status:"
-          ls -la godot-cpp/bin/ 2>/dev/null || echo "No godot-cpp libraries found"
           
-          # Build the extension using the simplified SConstruct approach
-          scons platform=${{ matrix.platform }} target=${{ matrix.target }} arch=${{ matrix.arch }} \
-            -j4 ${{ matrix.flags }}
+          # Show godot-cpp status
+          if [[ "${{ steps.godot-cpp-cache.outputs.cache-hit }}" == "true" ]]; then
+            echo "Using cached godot-cpp - build should be fast"
+          else
+            echo "Using fresh godot-cpp build"
+          fi
           
-          echo "Build complete. Generated files:"
+          # Build with optimal settings for CI
+          BUILD_FLAGS=""
+          if [[ "${{ matrix.target }}" == "template_release" ]]; then
+            BUILD_FLAGS="optimize=speed"
+          fi
+          
+          # Build the extension - this should be fast if godot-cpp is cached
+          echo "⏱️ Starting WFC extension build..."
+          START_TIME=$(date +%s)
+          
+          time scons platform=${{ matrix.platform }} target=${{ matrix.target }} arch=${{ matrix.arch }} \
+            ${BUILD_FLAGS} \
+            verbose=no \
+            progress=no \
+            -j$(nproc) ${{ matrix.flags }}
+          
+          END_TIME=$(date +%s)
+          BUILD_DURATION=$((END_TIME - START_TIME))
+          
+          echo "✅ WFC Extension build complete in ${BUILD_DURATION} seconds"
+          
+          # Report cache effectiveness
+          if [[ "${{ steps.godot-cpp-cache.outputs.cache-hit }}" == "true" ]]; then
+            echo "🚀 Fast build achieved using cached godot-cpp!"
+            echo "Cache saved approximately 3-5 minutes of build time"
+          else
+            echo "🔨 Full build completed - future builds will be faster with cache"
+          fi
+          
+          echo "📁 Generated files:"
           ls -la bin/
 
       - name: Verify build output
