@@ -412,7 +412,7 @@ jobs:
           echo "| Platform | Architecture | File |" >> $GITHUB_STEP_SUMMARY
           echo "|----------|-------------|------|" >> $GITHUB_STEP_SUMMARY
           
-          for file in release/bin/*; do
+          for file in wfc/bin/*; do
             if [[ -f "$file" ]]; then
               filename=$(basename "$file")
               case "$filename" in
@@ -442,3 +442,8 @@ jobs:
           echo "### 📥 Download:" >> $GITHUB_STEP_SUMMARY
           echo "- **Release Package**: \`wfc-gdextension-release\` artifact" >> $GITHUB_STEP_SUMMARY
           echo "- **Individual Builds**: Individual platform artifacts" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### 🚀 Easy Installation:" >> $GITHUB_STEP_SUMMARY
+          echo "1. Download and extract \`wfc-gdextension-cross-platform.tar.gz\`" >> $GITHUB_STEP_SUMMARY
+          echo "2. Copy the \`wfc/\` folder to your project's \`addons/\` directory" >> $GITHUB_STEP_SUMMARY
+          echo "3. Restart Godot and your extension will be ready to use!" >> $GITHUB_STEP_SUMMARY
