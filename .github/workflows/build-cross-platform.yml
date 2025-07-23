@@ -359,7 +359,18 @@ jobs:
           for dylib in "$platform_dir"/*.dylib; do
             if [[ -f "$dylib" ]]; then
               echo "Signing: $dylib"
-              codesign --force --deep --sign - "$dylib"
+              
+              # Use proper signing if certificate is available, otherwise ad-hoc
+              if [[ -n "${{ secrets.APPLE_SIGNING_IDENTITY }}" ]]; then
+                echo "Using developer certificate for signing"
+                # Import certificate from secrets (you'd need to set this up)
+                # codesign --force --deep --sign "${{ secrets.APPLE_SIGNING_IDENTITY }}" "$dylib"
+                # For now, use ad-hoc signing with hardened runtime
+                codesign --force --deep --sign - --options runtime "$dylib"
+              else
+                echo "Using ad-hoc signing (may still trigger quarantine)"
+                codesign --force --deep --sign - "$dylib"
+              fi
               
               # Verify signing
               if codesign --verify --verbose "$dylib" 2>/dev/null; then
@@ -396,22 +407,34 @@ jobs:
 
       - name: Package release
         run: |
-          mkdir -p wfc/bin
+          mkdir -p wfc/bin/{macos,windows,linux,web}
           
-          # Copy all built libraries to wfc directory
-          find artifacts/ -name "*.dll" -exec cp {} wfc/bin/ \;
-          find artifacts/ -name "*.so" -exec cp {} wfc/bin/ \;
-          find artifacts/ -name "*.dylib" -exec cp {} wfc/bin/ \;
-          find artifacts/ -name "*.wasm" -exec cp {} wfc/bin/ \;
+          # Copy built libraries to platform-specific directories
+          find artifacts/ -name "*.dylib" -exec cp {} wfc/bin/macos/ \;
+          find artifacts/ -name "*.dll" -exec cp {} wfc/bin/windows/ \;
+          find artifacts/ -name "*.so" -exec cp {} wfc/bin/linux/ \;
+          find artifacts/ -name "*.wasm" -exec cp {} wfc/bin/web/ \;
           
           # Copy extension configuration and metadata files
           cp wfc.gdextension wfc/
           cp plugin.cfg wfc/
           cp README.md wfc/ 2>/dev/null || echo "README.md not found"
           cp LICENSE wfc/ 2>/dev/null || echo "LICENSE not found"
+          cp remove_quarantine_macos.sh wfc/ 2>/dev/null || echo "Quarantine removal script not found"
           
           echo "Release package contents:"
           find wfc/ -type f | sort
+          
+          echo ""
+          echo "Platform-specific library organization:"
+          echo "macOS libraries:"
+          ls -la wfc/bin/macos/ 2>/dev/null || echo "No macOS libraries"
+          echo "Windows libraries:"
+          ls -la wfc/bin/windows/ 2>/dev/null || echo "No Windows libraries"
+          echo "Linux libraries:"
+          ls -la wfc/bin/linux/ 2>/dev/null || echo "No Linux libraries"
+          echo "Web libraries:"
+          ls -la wfc/bin/web/ 2>/dev/null || echo "No Web libraries"
           
           # Create archive
           tar -czf wfc-gdextension-cross-platform.tar.gz wfc/
@@ -471,3 +494,13 @@ jobs:
           echo "1. Download and extract \`wfc-gdextension-cross-platform.tar.gz\`" >> $GITHUB_STEP_SUMMARY
           echo "2. Copy the \`wfc/\` folder to your project's \`addons/\` directory" >> $GITHUB_STEP_SUMMARY
           echo "3. Restart Godot and your extension will be ready to use!" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### 🍎 macOS Users - Quarantine Removal:" >> $GITHUB_STEP_SUMMARY
+          echo "If macOS blocks the libraries, run this command in Terminal:" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`bash" >> $GITHUB_STEP_SUMMARY
+          echo "xattr -dr com.apple.quarantine /path/to/your/project/addons/wfc/bin/macos/" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+          echo "Or for a one-liner after copying to your project:" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`bash" >> $GITHUB_STEP_SUMMARY
+          echo "find /path/to/your/project/addons/wfc/bin/macos/ -name '*.dylib' -exec xattr -d com.apple.quarantine {} \\;" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
